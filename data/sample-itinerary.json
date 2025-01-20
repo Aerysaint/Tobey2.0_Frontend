@@ -1,0 +1,67 @@
+{
+  "Manali Adventure": [
+    {
+      "id": "1",
+      "activityId": "hadimba-temple",
+      "title": "Hadimba Temple Visit",
+      "start": "2023-07-01T08:00:00",
+      "end": "2023-07-01T10:00:00",
+      "location": "Old Manali",
+      "description": "Ancient temple surrounded by cedar forest",
+      "cost": 1000
+    },
+    {
+      "id": "2",
+      "activityId": "solang-valley",
+      "title": "Solang Valley Adventure",
+      "start": "2023-07-01T13:00:00",
+      "end": "2023-07-01T17:00:00",
+      "location": "Solang Valley",
+      "description": "Paragliding and zip-lining adventure",
+      "cost": 5000
+    },
+    {
+      "id": "3",
+      "activityId": "mall-road",
+      "title": "Mall Road Shopping",
+      "start": "2023-07-02T15:00:00",
+      "end": "2023-07-02T19:00:00",
+      "location": "Mall Road",
+      "description": "Shopping and local cuisine experience",
+      "cost": 3000
+    }
+  ],
+  "Shimla Retreat": [
+    {
+      "id": "1",
+      "activityId": "ridge",
+      "title": "The Ridge Visit",
+      "start": "2023-07-01T10:00:00",
+      "end": "2023-07-01T12:00:00",
+      "location": "The Ridge, Shimla",
+      "description": "Scenic promenade with panoramic views",
+      "cost": 500
+    },
+    {
+      "id": "2",
+      "activityId": "kufri",
+      "title": "Kufri Adventure",
+      "start": "2023-07-01T14:00:00",
+      "end": "2023-07-01T18:00:00",
+      "location": "Kufri",
+      "description": "Horse riding and nature trails",
+      "cost": 2000
+    },
+    {
+      "id": "3",
+      "activityId": "mall-road-shimla",
+      "title": "Mall Road Exploration",
+      "start": "2023-07-02T11:00:00",
+      "end": "2023-07-02T15:00:00",
+      "location": "Mall Road, Shimla",
+      "description": "Shopping and colonial architecture",
+      "cost": 1500
+    }
+  ]
+}
+
