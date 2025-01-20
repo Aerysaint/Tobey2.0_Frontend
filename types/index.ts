@@ -6,6 +6,8 @@ export interface Activity {
   duration: number
   image: string
   cost: number
+  type?: "user_added" | "ai_recommendation"
+  startTime?: Date
 }
 
 export interface ChatMessage {
@@ -13,18 +15,10 @@ export interface ChatMessage {
   content: string
   sender: {
     id: string
-    name: string
-    role: 'agent' | 'customer' | 'ai'
-    avatar?: string
+    role: "ai" | "customer"
+    name?: string
   }
   timestamp: Date
-}
-
-export interface CalendarEvent {
-  id: string
-  activityId: string
-  start: Date
-  end: Date
 }
 
 export interface Plan {
@@ -32,13 +26,8 @@ export interface Plan {
   title: string
   budget: number
   spent: number
-  activities: Activity[]
-  events: CalendarEvent[]
-  participants: {
-    id: string
-    name: string
-    role: 'agent' | 'customer'
-    avatar?: string
-  }[]
+  activityIds: string[]
+  activities?: Activity[]
+  participants: string[]
 }
 

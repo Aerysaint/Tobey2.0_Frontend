@@ -100,27 +100,13 @@ export function AIAssistantChat({ isOpen, onClose, onCreateGroup }: AIAssistantC
 
     // Get destination from chat context
     const destination = messages.find(m => m.sender.id === "user")?.content || "New Trip";
-    const itinerary = sampleItinerary["Manali Adventure"]; // We'll use Manali as default for now
 
-    const activities: Activity[] = itinerary.map((item) => ({
-      id: item.activityId,
-      title: item.title,
-      location: item.location,
-      description: item.description,
-      duration: (new Date(item.end).getTime() - new Date(item.start).getTime()) / (1000 * 60 * 60),
-      image: "/placeholder.svg?height=400&width=400",
-      cost: item.cost,
-    }));
-
-    const events: Event[] = itinerary.map((item) => ({
-      id: item.id,
-      activityId: item.activityId,
-      start: new Date(item.start),
-      end: new Date(item.end),
-    }));
+    // Create empty group with no predefined activities
+    const activities: Activity[] = [];
+    const events: Event[] = [];
 
     simulateAIMessage(
-      `Perfect! I've created a personalized travel group for your ${destination} trip. You'll be redirected to your planner in a moment.`
+      `Perfect! I've created a new group for your trip. You'll be redirected to your planner in a moment.`
     );
 
     // Wait for the message to be shown before creating group

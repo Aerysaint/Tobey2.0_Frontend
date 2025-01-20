@@ -2,8 +2,8 @@
 
 import { useDrop } from "react-dnd"
 import { addDays, format, startOfWeek, isSameDay, addHours, subDays, isWithinInterval } from "date-fns"
-import type { Activity, Plan, Event } from "@/types"
-import { useToast } from "@/components/ui/use-toast"
+import type { Activity, Plan } from "@/types"
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { X, ChevronLeft, ChevronRight, CalendarIcon } from "lucide-react"
@@ -13,22 +13,20 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 
 interface CalendarProps {
   plan: Plan
-  onAddEvent: (event: Event) => void
-  onRemoveEvent: (eventId: string) => void
+  onAddActivity: (activity: Activity, startTime: Date) => void
+  onRemoveActivity: (activityId: string) => void
 }
 
-export function Calendar({ plan, onAddEvent, onRemoveEvent }: CalendarProps) {
+export function Calendar({ plan, onAddActivity, onRemoveActivity }: CalendarProps) {
   const [startDate, setStartDate] = useState(startOfWeek(new Date()))
   const days = Array.from({ length: 7 }, (_, i) => addDays(startDate, i))
   const hours = Array.from({ length: 24 }, (_, i) => i)
 
   const getDayBudget = (day: Date) => {
-    return plan.events
-      .filter((event) => isSameDay(new Date(event.start), day))
-      .reduce((total, event) => {
-        const activity = plan.activities.find((a) => a.id === event.activityId)
-        return total + (activity?.cost || 0)
-      }, 0)
+    return (plan.activityIds || []).reduce((total, id) => {
+      const activity = plan.activities?.find(a => a.id === id)
+      return total + (activity?.cost || 0)
+    }, 0)
   }
 
   const handlePrevWeek = () => {
@@ -99,8 +97,8 @@ export function Calendar({ plan, onAddEvent, onRemoveEvent }: CalendarProps) {
                     day={day}
                     hour={hour}
                     plan={plan}
-                    onAddEvent={onAddEvent}
-                    onRemoveEvent={onRemoveEvent}
+                    onAddActivity={onAddActivity}
+                    onRemoveActivity={onRemoveActivity}
                   />
                 ))}
               </div>
@@ -116,36 +114,25 @@ function CalendarCell({
   day,
   hour,
   plan,
-  onAddEvent,
-  onRemoveEvent,
+  onAddActivity,
+  onRemoveActivity,
 }: {
   day: Date
   hour: number
   plan: Plan
-  onAddEvent: (event: Event) => void
-  onRemoveEvent: (eventId: string) => void
+  onAddActivity: (activity: Activity, startTime: Date) => void
+  onRemoveActivity: (activityId: string) => void
 }) {
-  const { toast } = useToast()
-
   const [{ isOver }, drop] = useDrop(
     () => ({
       accept: "ACTIVITY",
       drop: (item: Activity) => {
         const start = new Date(day)
         start.setHours(hour)
-        const end = addHours(start, item.duration)
 
-        const newEvent: Event = {
-          id: Math.random().toString(),
-          activityId: item.id,
-          start,
-          end,
-        }
+        onAddActivity(item, start)
 
-        onAddEvent(newEvent)
-
-        toast({
-          title: "Activity Added",
+        toast.success("Activity Added", {
           description: `${item.title} has been added to your itinerary on ${format(start, "MMMM do")} at ${format(start, "h:mm a")}.`,
           duration: 3000,
         })
@@ -154,40 +141,46 @@ function CalendarCell({
         isOver: !!monitor.isOver(),
       }),
     }),
-    [day, hour, onAddEvent],
+    [day, hour, onAddActivity],
   )
 
-  const cellEvents = plan.events.filter((event) => {
-    const eventStart = new Date(event.start)
-    const eventEnd = new Date(event.end)
+  const cellActivities = (plan.activityIds || []).filter(id => {
+    const activity = plan.activities?.find(a => a.id === id)
+    if (!activity) return false
+
+    const activityStart = activity.startTime ? new Date(activity.startTime) : null
+    if (!activityStart) return false
+
+    const activityEnd = addHours(activityStart, activity.duration)
     const cellStart = new Date(day).setHours(hour)
     const cellEnd = new Date(day).setHours(hour + 1)
+
     return (
-      isWithinInterval(new Date(cellStart), { start: eventStart, end: eventEnd }) ||
-      isWithinInterval(new Date(cellEnd), { start: eventStart, end: eventEnd })
+      isWithinInterval(new Date(cellStart), { start: activityStart, end: activityEnd }) ||
+      isWithinInterval(new Date(cellEnd), { start: activityStart, end: activityEnd })
     )
   })
 
   return (
     <div ref={drop} className={`h-16 border-t p-1 transition-colors ${isOver ? "bg-primary/20" : ""}`}>
-      {cellEvents.map((event) => {
-        const activity = plan.activities.find((a) => a.id === event.activityId)
-        if (!activity) return null
+      {cellActivities.map((activityId) => {
+        const activity = plan.activities?.find(a => a.id === activityId)
+        if (!activity || !activity.startTime) return null
 
-        const eventStart = new Date(event.start)
-        const eventEnd = new Date(event.end)
+        const activityStart = new Date(activity.startTime)
+        const activityEnd = addHours(activityStart, activity.duration)
         const cellStart = new Date(day).setHours(hour)
         const cellEnd = new Date(day).setHours(hour + 1)
 
-        const startOffset = Math.max(0, (eventStart.getTime() - cellStart) / (60 * 60 * 1000))
+        const startOffset = Math.max(0, (activityStart.getTime() - cellStart) / (60 * 60 * 1000))
         const duration = Math.min(
           1,
-          (eventEnd.getTime() - Math.max(eventStart.getTime(), cellStart)) / (60 * 60 * 1000),
+          (activityEnd.getTime() - Math.max(activityStart.getTime(), cellStart)) / (60 * 60 * 1000),
         )
 
         return (
           <div
-            key={event.id}
+            key={activity.id}
             className="group relative rounded-md bg-primary p-1 text-xs text-primary-foreground overflow-hidden"
             style={{
               position: "absolute",
@@ -202,7 +195,7 @@ function CalendarCell({
               variant="ghost"
               size="icon"
               className="absolute right-0 top-0 hidden h-4 w-4 rounded-full p-0 group-hover:flex"
-              onClick={() => onRemoveEvent(event.id)}
+              onClick={() => onRemoveActivity(activity.id)}
             >
               <X className="h-3 w-3" />
             </Button>

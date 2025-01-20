@@ -7,6 +7,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { AIAssistantChat } from "./components/ai-assistant-chat";
+import { groupsApi } from "./services/groupsApi";
+import { toast, Toaster } from "sonner";
 
 export default function LandingPage() {
   const router = useRouter();
@@ -14,11 +16,20 @@ export default function LandingPage() {
   const [isAIChatOpen, setIsAIChatOpen] = useState(false);
   const [groupId, setGroupId] = useState("");
 
-  const handleJoinGroup = () => {
+  const handleJoinGroup = async () => {
     if (groupId.trim()) {
-      router.push(`/planner?group=${groupId}`);
+      const group = await groupsApi.getGroup(groupId.trim());
+      if (group) {
+        router.push(`/planner?group=${groupId}`);
+      } else {
+        toast.error("Group Not Found", {
+          description: "Please check the group ID and try again.",
+        });
+      }
     } else {
-      alert("Please enter a group ID");
+      toast.error("Invalid Input", {
+        description: "Please enter a group ID",
+      });
     }
   };
 
@@ -37,6 +48,7 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-white">
+      <Toaster richColors position="top-center" />
       <div className="container mx-auto px-4 py-16 md:py-24">
         <div className="mb-16 text-center">
           <div className="flex items-center justify-center gap-2 mb-4">
@@ -80,7 +92,7 @@ export default function LandingPage() {
             <CardHeader className="pb-4">
               <CardTitle className="text-2xl">Ask AI Assistant</CardTitle>
               <CardDescription>
-                Best cafes in Manali? Most stunning views in the Himalayas? Ask our AI anything about travel.
+                Get personalized travel recommendations and create your perfect itinerary with AI assistance.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -114,8 +126,8 @@ export default function LandingPage() {
       <AIAssistantChat
         isOpen={isAIChatOpen}
         onClose={() => setIsAIChatOpen(false)}
-        onCreateGroup={(groupName) => {
-          router.push("/planner");
+        onCreateGroup={(groupName, activities, events) => {
+          router.push("/planner?chat=ai");
         }}
       />
     </div>
