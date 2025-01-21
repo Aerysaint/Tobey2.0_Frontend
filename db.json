@@ -1,0 +1,100 @@
+{
+  "groups": [
+    {
+      "id": "1737397008300",
+      "name": "adf",
+      "plan": {
+        "id": "1737397008300",
+        "title": "adf",
+        "budget": 0,
+        "spent": 0,
+        "activityIds": [],
+        "participants": []
+      }
+    },
+    {
+      "id": "1737397164343",
+      "name": "eqori",
+      "plan": {
+        "id": "1737397164343",
+        "title": "eqori",
+        "budget": 0,
+        "spent": 0,
+        "activityIds": [],
+        "participants": []
+      }
+    },
+    {
+      "id": "1737397403924",
+      "name": "asfd",
+      "plan": {
+        "id": "1737397403924",
+        "title": "asfd",
+        "budget": 12323,
+        "spent": 15000,
+        "activityIds": [
+          "hadimba-temple",
+          "solang-valley",
+          "hadimba-temple",
+          "solang-valley",
+          "mall-road",
+          "hadimba-temple",
+          "solang-valley"
+        ],
+        "participants": []
+      }
+    }
+  ],
+  "activities": [
+    {
+      "id": "hadimba-temple",
+      "title": "Hadimba Temple Visit",
+      "location": "Old Manali",
+      "description": "Ancient temple surrounded by cedar forest",
+      "duration": 2,
+      "image": "/placeholder.svg",
+      "cost": 1000,
+      "type": "tourist_spot"
+    },
+    {
+      "id": "solang-valley",
+      "title": "Solang Valley Adventure",
+      "location": "Solang Valley",
+      "description": "Paragliding and zip-lining adventure",
+      "duration": 4,
+      "image": "/placeholder.svg",
+      "cost": 5000,
+      "type": "adventure"
+    },
+    {
+      "id": "mall-road",
+      "title": "Mall Road Shopping",
+      "location": "Mall Road",
+      "description": "Shopping and local cuisine experience",
+      "duration": 4,
+      "image": "/placeholder.svg",
+      "cost": 3000,
+      "type": "shopping"
+    },
+    {
+      "id": "vashisht-hot-springs",
+      "title": "Vashisht Hot Springs",
+      "location": "Vashisht Village",
+      "description": "Natural hot springs and ancient temples",
+      "duration": 3,
+      "image": "/placeholder.svg",
+      "cost": 500,
+      "type": "wellness"
+    },
+    {
+      "id": "manu-temple",
+      "title": "Manu Temple Trek",
+      "location": "Old Manali",
+      "description": "Scenic trek to ancient temple with valley views",
+      "duration": 5,
+      "image": "/placeholder.svg",
+      "cost": 1500,
+      "type": "trekking"
+    }
+  ]
+}

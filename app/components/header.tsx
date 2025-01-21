@@ -12,8 +12,6 @@ interface HeaderProps {
 }
 
 export function Header({ plan, onUpdateBudget, onHome, onShare, onClearAllNodes }: HeaderProps) {
-  const agent = plan.participants.find((p) => p.role === "agent")
-
   const handleBudgetUpdate = () => {
     const newBudget = prompt("Enter new budget:", plan.budget.toString())
     if (newBudget) {
@@ -42,30 +40,15 @@ export function Header({ plan, onUpdateBudget, onHome, onShare, onClearAllNodes 
           <span className="font-medium text-foreground">₹{plan.spent.toLocaleString()}</span>
         </div>
       </div>
-      <div className="flex items-center space-x-4">
-        {agent && (
-          <div className="flex items-center space-x-2">
-            <Avatar className="h-8 w-8">
-              <AvatarImage src={agent.avatar} />
-              <AvatarFallback>{agent.name[0]}</AvatarFallback>
-            </Avatar>
-            <div className="text-sm">
-              <p className="font-medium">{agent.name}</p>
-              <p className="text-xs text-muted-foreground">Travel Agent</p>
-            </div>
-          </div>
-        )}
+      <div className="flex items-center space-x-2">
         <Button variant="ghost" size="icon" onClick={onHome}>
-          <Home className="h-5 w-5" />
+          <Home className="h-4 w-4" />
         </Button>
         <Button variant="ghost" size="icon" onClick={onShare}>
-          <Share2 className="h-5 w-5" />
+          <Share2 className="h-4 w-4" />
         </Button>
         <Button variant="ghost" size="icon" onClick={onClearAllNodes}>
-          <Trash2 className="h-5 w-5" />
-        </Button>
-        <Button variant="ghost" size="icon">
-          <Settings className="h-5 w-5" />
+          <Trash2 className="h-4 w-4" />
         </Button>
       </div>
     </header>

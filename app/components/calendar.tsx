@@ -1,7 +1,7 @@
 "use client"
 
 import { useDrop } from "react-dnd"
-import { addDays, format, startOfWeek, isSameDay, addHours, subDays, isWithinInterval } from "date-fns"
+import { addDays, format, startOfWeek, isSameDay, addHours, subDays, isWithinInterval, isAfter, isBefore, isEqual } from "date-fns"
 import type { Activity, Plan } from "@/types"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -23,9 +23,9 @@ export function Calendar({ plan, onAddActivity, onRemoveActivity }: CalendarProp
   const hours = Array.from({ length: 24 }, (_, i) => i)
 
   const getDayBudget = (day: Date) => {
-    return (plan.activityIds || []).reduce((total, id) => {
-      const activity = plan.activities?.find(a => a.id === id)
-      return total + (activity?.cost || 0)
+    return (plan.activities || []).reduce((total, activity) => {
+      const activityStart = new Date(activity.startTime || 0)
+      return isSameDay(activityStart, day) ? total + (activity.cost || 0) : total
     }, 0)
   }
 
@@ -123,12 +123,46 @@ function CalendarCell({
   onAddActivity: (activity: Activity, startTime: Date) => void
   onRemoveActivity: (activityId: string) => void
 }) {
-  const [{ isOver }, drop] = useDrop(
+  const [{ isOver, canDrop }, drop] = useDrop(
     () => ({
       accept: "ACTIVITY",
+      canDrop: (item: Activity) => {
+        // Create the start time for the new activity
+        const newActivityStart = new Date(day)
+        newActivityStart.setHours(hour, 0, 0, 0)
+        const newActivityEnd = addHours(newActivityStart, item.duration)
+
+        // Check for overlaps with existing activities
+        const hasOverlap = (plan.activities || []).some(existingActivity => {
+          if (!existingActivity.startTime) return false
+
+          const existingStart = new Date(existingActivity.startTime)
+          const existingEnd = addHours(existingStart, existingActivity.duration)
+
+          // Check if the new activity overlaps with this existing activity
+          return (
+            isSameDay(existingStart, newActivityStart) &&
+            (
+              // New activity starts during existing activity
+              (isAfter(newActivityStart, existingStart) && isBefore(newActivityStart, existingEnd)) ||
+              // New activity ends during existing activity
+              (isAfter(newActivityEnd, existingStart) && isBefore(newActivityEnd, existingEnd)) ||
+              // New activity completely contains existing activity
+              (isBefore(newActivityStart, existingStart) && isAfter(newActivityEnd, existingEnd)) ||
+              // New activity starts exactly at the same time
+              isEqual(newActivityStart, existingStart)
+            )
+          )
+        })
+
+        return !hasOverlap
+      },
       drop: (item: Activity) => {
         const start = new Date(day)
         start.setHours(hour)
+        start.setMinutes(0)
+        start.setSeconds(0)
+        start.setMilliseconds(0)
 
         onAddActivity(item, start)
 
@@ -139,55 +173,52 @@ function CalendarCell({
       },
       collect: (monitor) => ({
         isOver: !!monitor.isOver(),
+        canDrop: !!monitor.canDrop(),
       }),
     }),
-    [day, hour, onAddActivity],
+    [day, hour, onAddActivity, plan.activities]
   )
 
-  const cellActivities = (plan.activityIds || []).filter(id => {
-    const activity = plan.activities?.find(a => a.id === id)
-    if (!activity) return false
+  const cellActivities = (plan.activities || []).filter(activity => {
+    if (!activity.startTime) return false
 
-    const activityStart = activity.startTime ? new Date(activity.startTime) : null
-    if (!activityStart) return false
-
+    const activityStart = new Date(activity.startTime)
     const activityEnd = addHours(activityStart, activity.duration)
-    const cellStart = new Date(day).setHours(hour)
-    const cellEnd = new Date(day).setHours(hour + 1)
+    const cellStart = new Date(day)
+    cellStart.setHours(hour, 0, 0, 0)
+    const cellEnd = new Date(day)
+    cellEnd.setHours(hour + 1, 0, 0, 0)
 
-    return (
-      isWithinInterval(new Date(cellStart), { start: activityStart, end: activityEnd }) ||
-      isWithinInterval(new Date(cellEnd), { start: activityStart, end: activityEnd })
-    )
+    return isWithinInterval(cellStart, { start: activityStart, end: activityEnd })
   })
 
   return (
-    <div ref={drop} className={`h-16 border-t p-1 transition-colors ${isOver ? "bg-primary/20" : ""}`}>
-      {cellActivities.map((activityId) => {
-        const activity = plan.activities?.find(a => a.id === activityId)
-        if (!activity || !activity.startTime) return null
+    <div
+      ref={drop}
+      className={`h-16 border-t p-1 relative transition-colors ${isOver && canDrop ? "bg-primary/20" :
+          isOver && !canDrop ? "bg-destructive/20" : ""
+        }`}
+    >
+      {cellActivities.map((activity) => {
+        if (!activity.startTime) return null
 
         const activityStart = new Date(activity.startTime)
-        const activityEnd = addHours(activityStart, activity.duration)
-        const cellStart = new Date(day).setHours(hour)
-        const cellEnd = new Date(day).setHours(hour + 1)
+        const activityStartHour = activityStart.getHours()
 
-        const startOffset = Math.max(0, (activityStart.getTime() - cellStart) / (60 * 60 * 1000))
-        const duration = Math.min(
-          1,
-          (activityEnd.getTime() - Math.max(activityStart.getTime(), cellStart)) / (60 * 60 * 1000),
-        )
+        if (hour !== activityStartHour) return null
+
+        const heightInCells = activity.duration
 
         return (
           <div
             key={activity.id}
-            className="group relative rounded-md bg-primary p-1 text-xs text-primary-foreground overflow-hidden"
+            className="group absolute rounded-md bg-primary p-1 text-xs text-primary-foreground overflow-hidden"
             style={{
-              position: "absolute",
-              top: `${startOffset * 100}%`,
-              height: `${duration * 100}%`,
+              top: 0,
+              height: `${heightInCells * 64}px`,
               left: "4px",
               right: "4px",
+              zIndex: 10
             }}
           >
             <div className="overflow-hidden text-ellipsis whitespace-nowrap">{activity.title}</div>

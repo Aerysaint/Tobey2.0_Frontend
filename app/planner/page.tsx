@@ -21,7 +21,8 @@ const defaultPlan: Plan = {
   budget: 0,
   spent: 0,
   activityIds: [],
-  participants: [],
+  activities: [],
+  participants: []
 }
 
 type Action =
@@ -60,23 +61,40 @@ export default function PlannerPage() {
   const [showCalendar, setShowCalendar] = useState(true)
   const [travelChatMessages, setTravelChatMessages] = useState<ChatMessage[]>([])
   const [groups, setGroups] = useState<{ id: string; name: string; plan: Plan }[]>([])
-  const [currentGroup, setCurrentGroup] = useState<string | null>(null)
+  const [currentGroup, setCurrentGroup] = useState<{ id: string; name: string; plan: Plan } | null>(null)
   const [isAIChatOpen, setIsAIChatOpen] = useState(false)
 
-  // Load groups on mount
+  // Load groups on mount and set up real-time listeners
   useEffect(() => {
     const loadGroups = async () => {
       const fetchedGroups = await groupsApi.getGroups()
       setGroups(fetchedGroups)
     }
     loadGroups()
-  }, [])
+
+    // Set up real-time listener for current group if one is selected
+    let unsubscribe: (() => void) | null = null
+    if (currentGroup) {
+      unsubscribe = groupsApi.subscribeToGroup(currentGroup.id, (updatedGroup) => {
+        setGroups((prevGroups) =>
+          prevGroups.map((g) => (g.id === currentGroup.id ? updatedGroup : g))
+        )
+      })
+    }
+
+    // Cleanup subscription on unmount or when currentGroup changes
+    return () => {
+      if (unsubscribe) {
+        unsubscribe()
+      }
+    }
+  }, [currentGroup])
 
   const handleCreateGroup = useCallback(async (groupName: string) => {
     try {
       const newGroup = await groupsApi.createGroup(groupName)
       setGroups((prev) => [...prev, newGroup])
-      setCurrentGroup(newGroup.id)
+      setCurrentGroup(newGroup)
       setShowCalendar(true)
       setIsAIChatOpen(false)
       router.push(`/planner?group=${newGroup.id}`)
@@ -95,7 +113,7 @@ export default function PlannerPage() {
       const checkGroup = async () => {
         const group = await groupsApi.getGroup(groupId)
         if (group) {
-          setCurrentGroup(groupId)
+          setCurrentGroup(group)
           setIsAIChatOpen(false)
           toast.success("Group Joined", {
             description: `You've joined the group: ${group.name}`,
@@ -117,76 +135,67 @@ export default function PlannerPage() {
 
   const handleUpdateBudget = useCallback(
     async (amount: number) => {
-      if (currentGroup) {
-        const group = groups.find((g) => g.id === currentGroup)
-        if (group) {
-          const updatedGroup = {
-            ...group,
-            plan: {
-              ...group.plan,
-              budget: amount,
-            },
-          }
-          try {
-            await groupsApi.updateGroup(updatedGroup)
-            setGroups((prevGroups) =>
-              prevGroups.map((g) => (g.id === currentGroup ? updatedGroup : g))
-            )
-            toast.success("Budget Updated", {
-              description: `Budget has been set to ₹${amount}`,
-            })
-          } catch (error) {
-            console.error("Error updating budget:", error)
-            toast.error("Failed to update budget")
-          }
-        }
-      } else {
+      if (!currentGroup) {
         dispatch({ type: "UPDATE_BUDGET", amount })
+        return
+      }
+
+      const updatedGroup = {
+        ...currentGroup,
+        plan: {
+          ...currentGroup.plan,
+          budget: amount,
+        },
+      }
+
+      try {
+        await groupsApi.updateGroup(updatedGroup)
+        setCurrentGroup(updatedGroup)
+        toast.success("Budget Updated", {
+          description: `Budget has been set to ₹${amount}`,
+        })
+      } catch (error) {
+        console.error("Error updating budget:", error)
+        toast.error("Failed to update budget")
       }
     },
-    [currentGroup, groups],
+    [currentGroup, dispatch],
   )
 
   const handleToggleChat = useCallback(() => {
     setIsChatOpen((prev) => !prev)
   }, [])
 
-  const handleAddActivity = useCallback(
-    async (activity: Activity, startTime?: Date) => {
-      if (!currentGroup) {
-        toast.error("No group selected")
-        return
-      }
+  const handleAddActivity = async (activity: Activity, startTime: Date) => {
+    if (!currentGroup) return
 
-      try {
-        const group = groups.find((g) => g.id === currentGroup)
-        if (!group) {
-          toast.error("Group not found")
-          return
-        }
+    const existingActivity = await groupsApi.getActivity(activity.id)
+    if (!existingActivity) {
+      toast.error("Activity not found")
+      return
+    }
 
-        const activityWithStartTime = startTime ? { ...activity, startTime } : activity
-        const updatedGroup = {
-          ...group,
-          plan: {
-            ...group.plan,
-            activityIds: [...group.plan.activityIds, activity.id],
-            spent: group.plan.spent + activity.cost
-          }
-        }
+    const activityWithStartTime = { ...existingActivity, startTime }
 
-        const savedGroup = await groupsApi.updateGroup(updatedGroup)
-        setGroups((prevGroups) =>
-          prevGroups.map((g) => (g.id === currentGroup ? savedGroup : g))
-        )
-        toast.success("Activity added to calendar")
-      } catch (error) {
-        console.error("Error adding activity:", error)
-        toast.error("Failed to add activity")
-      }
-    },
-    [currentGroup, groups]
-  )
+    const updatedGroup = {
+      ...currentGroup,
+      plan: {
+        ...currentGroup.plan,
+        activityIds: [...(currentGroup.plan.activityIds || []), activity.id],
+        activities: [...(currentGroup.plan.activities || []), activityWithStartTime],
+        spent: (currentGroup.plan.spent || 0) + (existingActivity.cost || 0),
+      },
+    }
+
+    try {
+      await groupsApi.updateGroup(updatedGroup)
+      setCurrentGroup(updatedGroup)
+      toast.success("Activity added to calendar")
+    } catch (error) {
+      console.error("Error adding activity:", error)
+      toast.error("Failed to add activity")
+    }
+  }
 
   const handleRemoveActivity = useCallback(
     async (activityId: string) => {
@@ -196,12 +205,6 @@ export default function PlannerPage() {
       }
 
       try {
-        const group = groups.find((g) => g.id === currentGroup)
-        if (!group) {
-          toast.error("Group not found")
-          return
-        }
-
         // Get the activity to calculate cost reduction
         const activity = await groupsApi.getActivity(activityId)
         if (!activity) {
@@ -210,25 +213,24 @@ export default function PlannerPage() {
         }
 
         const updatedGroup = {
-          ...group,
+          ...currentGroup,
           plan: {
-            ...group.plan,
-            activityIds: group.plan.activityIds.filter(id => id !== activityId),
-            spent: Math.max(0, group.plan.spent - activity.cost)
+            ...currentGroup.plan,
+            activityIds: currentGroup.plan.activityIds.filter(id => id !== activityId),
+            activities: currentGroup.plan.activities.filter(a => a.id !== activityId),
+            spent: Math.max(0, currentGroup.plan.spent - (activity.cost || 0))
           }
         }
 
-        const savedGroup = await groupsApi.updateGroup(updatedGroup)
-        setGroups((prevGroups) =>
-          prevGroups.map((g) => (g.id === currentGroup ? savedGroup : g))
-        )
+        await groupsApi.updateGroup(updatedGroup)
+        setCurrentGroup(updatedGroup)
         toast.success("Activity removed from calendar")
       } catch (error) {
         console.error("Error removing activity:", error)
         toast.error("Failed to remove activity")
       }
     },
-    [currentGroup, groups]
+    [currentGroup]
   )
 
   const handleToggleGroupChats = useCallback(() => {
@@ -237,27 +239,36 @@ export default function PlannerPage() {
   }, [])
 
   const handleOpenCalendar = useCallback((groupId: string) => {
-    setCurrentGroup(groupId)
+    setCurrentGroup(groups.find((g) => g.id === groupId) || null)
     setShowCalendar(true)
     setShowGroupChats(false)
-  }, [])
+  }, [groups])
 
-  const handleClearAllNodes = useCallback(() => {
-    if (currentGroup) {
-      setGroups((prevGroups) =>
-        prevGroups.map((group) => {
-          if (group.id === currentGroup) {
-            return {
-              ...group,
-              plan: {
-                ...group.plan,
-                spent: 0,
-              },
-            }
-          }
-          return group
-        }),
-      )
+  const handleClearAllNodes = useCallback(async () => {
+    if (!currentGroup) {
+      toast.error("No group selected")
+      return
+    }
+
+    try {
+      const updatedGroup = {
+        ...currentGroup,
+        plan: {
+          ...currentGroup.plan,
+          activityIds: [],
+          activities: [],
+          spent: 0
+        }
+      }
+
+      await groupsApi.updateGroup(updatedGroup)
+      setCurrentGroup(updatedGroup)
+      toast.success("All activities cleared", {
+        description: "Your plan has been reset."
+      })
+    } catch (error) {
+      console.error("Error clearing activities:", error)
+      toast.error("Failed to clear activities")
     }
   }, [currentGroup])
 
@@ -266,12 +277,12 @@ export default function PlannerPage() {
       <div className="flex flex-col h-screen overflow-hidden">
         <Toaster richColors position="top-center" />
         <Header
-          plan={currentGroup ? groups.find((g) => g.id === currentGroup)?.plan || defaultPlan : defaultPlan}
+          plan={currentGroup?.plan || defaultPlan}
           onUpdateBudget={handleUpdateBudget}
           onHome={() => router.push("/")}
           onShare={() => {
             if (currentGroup) {
-              const groupId = currentGroup
+              const groupId = currentGroup.id
               const shareableLink = `${window.location.origin}/planner?group=${groupId}`
 
               navigator.clipboard.writeText(groupId).then(() => {
@@ -313,10 +324,10 @@ export default function PlannerPage() {
         />
         <div className="flex flex-1 overflow-hidden">
           <Sidebar
-            plan={currentGroup ? groups.find((g) => g.id === currentGroup)?.plan || defaultPlan : defaultPlan}
+            plan={currentGroup?.plan || defaultPlan}
             onToggleGroupChats={handleToggleGroupChats}
             onAddActivity={handleAddActivity}
-            currentGroupId={currentGroup}
+            currentGroupId={currentGroup?.id || ""}
           />
           <div className="flex-1 overflow-hidden">
             {showGroupChats ? (
@@ -328,7 +339,7 @@ export default function PlannerPage() {
                 }}
                 onOpenCalendar={handleOpenCalendar}
                 onSelectGroup={(groupId) => {
-                  setCurrentGroup(groupId)
+                  setCurrentGroup(groups.find((g) => g.id === groupId) || null)
                   setShowCalendar(true)
                   setShowGroupChats(false)
                 }}
@@ -336,7 +347,7 @@ export default function PlannerPage() {
             ) : (
               <div className="flex-1 overflow-hidden">
                 <Calendar
-                  plan={groups.find((g) => g.id === currentGroup)?.plan || defaultPlan}
+                  plan={currentGroup?.plan || defaultPlan}
                   onAddActivity={handleAddActivity}
                   onRemoveActivity={handleRemoveActivity}
                 />
@@ -345,7 +356,7 @@ export default function PlannerPage() {
           </div>
           {isChatOpen && (
             <ChatPanel
-              plan={currentGroup ? groups.find((g) => g.id === currentGroup)?.plan || defaultPlan : defaultPlan}
+              plan={currentGroup?.plan || defaultPlan}
               isOpen={isChatOpen}
               onToggle={handleToggleChat}
               messages={travelChatMessages}

@@ -6,7 +6,7 @@ export interface Activity {
   duration: number
   image: string
   cost: number
-  type?: "user_added" | "ai_recommendation"
+  type: string
   startTime?: Date
 }
 
@@ -16,7 +16,7 @@ export interface ChatMessage {
   sender: {
     id: string
     role: "ai" | "customer"
-    name?: string
+    name: string
   }
   timestamp: Date
 }
@@ -27,7 +27,7 @@ export interface Plan {
   budget: number
   spent: number
   activityIds: string[]
-  activities?: Activity[]
+  activities: Activity[]
   participants: string[]
 }
 

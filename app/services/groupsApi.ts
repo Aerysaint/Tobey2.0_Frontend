@@ -1,6 +1,6 @@
 import type { Plan, Activity } from "@/types"
-
-const API_URL = "http://localhost:3001"
+import { database } from "../../firebaseConfig"
+import { ref, get, set, push, remove, onValue, off } from "firebase/database"
 
 interface Group {
   id: string
@@ -8,20 +8,36 @@ interface Group {
   plan: Plan
 }
 
+interface ScheduledActivity extends Activity {
+  startTime?: string // Store as ISO string for Firebase
+}
+
 export const groupsApi = {
   // Group methods
   async getGroups(): Promise<Group[]> {
-    const response = await fetch(`${API_URL}/groups`)
-    return response.json()
+    const groupsRef = ref(database, 'groups')
+    const snapshot = await get(groupsRef)
+    if (!snapshot.exists()) return []
+
+    const groups: Group[] = []
+    snapshot.forEach((childSnapshot) => {
+      groups.push({
+        id: childSnapshot.key!,
+        ...childSnapshot.val()
+      })
+    })
+    return groups
   },
 
   async getGroup(id: string): Promise<Group | null> {
     try {
-      const response = await fetch(`${API_URL}/groups/${id}`)
-      if (!response.ok) {
-        return null
+      const groupRef = ref(database, `groups/${id}`)
+      const snapshot = await get(groupRef)
+      if (!snapshot.exists()) return null
+      return {
+        id: snapshot.key!,
+        ...snapshot.val()
       }
-      return response.json()
     } catch (error) {
       console.error("Error fetching group:", error)
       return null
@@ -29,11 +45,13 @@ export const groupsApi = {
   },
 
   async createGroup(groupName: string): Promise<Group> {
+    const groupsRef = ref(database, 'groups')
+    const newGroupRef = push(groupsRef)
     const newGroup = {
-      id: Date.now().toString(),
+      id: newGroupRef.key!,
       name: groupName,
       plan: {
-        id: Date.now().toString(),
+        id: newGroupRef.key!,
         title: groupName,
         budget: 0,
         spent: 0,
@@ -42,42 +60,52 @@ export const groupsApi = {
       },
     }
 
-    const response = await fetch(`${API_URL}/groups`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(newGroup),
-    })
-
-    return response.json()
+    await set(newGroupRef, newGroup)
+    return newGroup
   },
 
   async updateGroup(group: Group): Promise<Group> {
-    const response = await fetch(`${API_URL}/groups/${group.id}`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(group),
-    })
-
-    return response.json()
+    // Convert Date objects to ISO strings for Firebase storage
+    const processedGroup = {
+      ...group,
+      plan: {
+        ...group.plan,
+        activities: group.plan.activities?.map(activity => ({
+          ...activity,
+          startTime: activity.startTime ? new Date(activity.startTime).toISOString() : undefined
+        }))
+      }
+    }
+    const groupRef = ref(database, `groups/${group.id}`)
+    await set(groupRef, processedGroup)
+    return group // Return original group with Date objects
   },
 
   // Activity methods
   async getActivities(): Promise<Activity[]> {
-    const response = await fetch(`${API_URL}/activities`)
-    return response.json()
+    const activitiesRef = ref(database, 'activities')
+    const snapshot = await get(activitiesRef)
+    if (!snapshot.exists()) return []
+
+    const activities: Activity[] = []
+    snapshot.forEach((childSnapshot) => {
+      activities.push({
+        id: childSnapshot.key!,
+        ...childSnapshot.val()
+      })
+    })
+    return activities
   },
 
   async getActivity(id: string): Promise<Activity | null> {
     try {
-      const response = await fetch(`${API_URL}/activities/${id}`)
-      if (!response.ok) {
-        return null
+      const activityRef = ref(database, `activities/${id}`)
+      const snapshot = await get(activityRef)
+      if (!snapshot.exists()) return null
+      return {
+        id: snapshot.key!,
+        ...snapshot.val()
       }
-      return response.json()
     } catch (error) {
       console.error("Error fetching activity:", error)
       return null
@@ -85,20 +113,15 @@ export const groupsApi = {
   },
 
   async createActivity(activity: Omit<Activity, "id">): Promise<Activity> {
+    const activitiesRef = ref(database, 'activities')
+    const newActivityRef = push(activitiesRef)
     const newActivity = {
       ...activity,
-      id: `activity-${Date.now()}`,
+      id: newActivityRef.key!,
     }
 
-    const response = await fetch(`${API_URL}/activities`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(newActivity),
-    })
-
-    return response.json()
+    await set(newActivityRef, newActivity)
+    return newActivity
   },
 
   async addActivityToGroup(groupId: string, activity: Activity): Promise<Group> {
@@ -160,4 +183,46 @@ export const groupsApi = {
         activity.description.toLowerCase().includes(searchTerm)
     )
   },
+
+  // Real-time listeners
+  subscribeToGroup(groupId: string, callback: (group: Group) => void): () => void {
+    const groupRef = ref(database, `groups/${groupId}`)
+    onValue(groupRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const rawGroup = snapshot.val()
+        // Convert ISO strings back to Date objects
+        const processedGroup = {
+          ...rawGroup,
+          id: snapshot.key!,
+          plan: {
+            ...rawGroup.plan,
+            activities: rawGroup.plan.activities?.map((activity: ScheduledActivity) => ({
+              ...activity,
+              startTime: activity.startTime ? new Date(activity.startTime) : undefined
+            }))
+          }
+        }
+        callback(processedGroup)
+      }
+    })
+
+    return () => off(groupRef)
+  },
+
+  subscribeToActivities(callback: (activities: Activity[]) => void): () => void {
+    const activitiesRef = ref(database, 'activities')
+    onValue(activitiesRef, (snapshot) => {
+      const activities: Activity[] = []
+      snapshot.forEach((childSnapshot) => {
+        activities.push({
+          id: childSnapshot.key!,
+          ...childSnapshot.val()
+        })
+      })
+      callback(activities)
+    })
+
+    // Return unsubscribe function
+    return () => off(activitiesRef)
+  }
 } 

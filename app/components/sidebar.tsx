@@ -1,11 +1,12 @@
 "use client"
 
 import { useState, useCallback, useEffect } from "react"
-import { Search, Plus, Bot, GripVertical } from "lucide-react"
+import { Search, Plus, Bot, GripVertical, MessageCircle } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { ActivityCard } from "./activity-card"
+import { GroupChat } from "./group-chat"
 import type { Plan, Activity } from "@/types"
 import { groupsApi } from "../services/groupsApi"
 import { toast } from "sonner"
@@ -26,6 +27,7 @@ export function Sidebar({
   const [searchQuery, setSearchQuery] = useState("")
   const [searchResults, setSearchResults] = useState<Activity[]>([])
   const [isSearching, setIsSearching] = useState(false)
+  const [showChat, setShowChat] = useState(false)
   const [placesToGoHeight, setPlacesToGoHeight] = useState(50) // percentage
   const [availableActivities, setAvailableActivities] = useState<Activity[]>([])
 
@@ -82,6 +84,32 @@ export function Sidebar({
     document.addEventListener("mouseup", handleMouseUp)
   }
 
+  if (!currentGroupId) {
+    return (
+      <div className="w-80 border-r bg-muted/10 flex items-center justify-center">
+        <p className="text-muted-foreground text-center p-4">
+          Please join or create a group to view activities and chat
+        </p>
+      </div>
+    )
+  }
+
+  if (showChat) {
+    return (
+      <div className="w-80 border-r bg-muted/10">
+        <div className="flex flex-col h-full">
+          <div className="p-4 border-b flex justify-between items-center">
+            <h2 className="font-semibold">{plan.title} Chat</h2>
+            <Button variant="ghost" size="sm" onClick={() => setShowChat(false)}>
+              Back to Activities
+            </Button>
+          </div>
+          <GroupChat groupId={currentGroupId} groupName={plan.title} />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="w-80 border-r bg-muted/10">
       <div className="flex flex-col h-full">
@@ -108,6 +136,7 @@ export function Sidebar({
                     <ActivityCard
                       key={activity.id}
                       activity={activity}
+                      onAdd={() => onAddActivity(activity)}
                     />
                   ))
                 ) : (
@@ -118,6 +147,7 @@ export function Sidebar({
                   <ActivityCard
                     key={activity.id}
                     activity={activity}
+                    onAdd={() => onAddActivity(activity)}
                   />
                 ))
               )}
@@ -129,10 +159,10 @@ export function Sidebar({
           <Button
             variant="outline"
             className="w-full justify-start"
-            onClick={onToggleGroupChats}
+            onClick={() => setShowChat(true)}
           >
-            <Plus className="mr-2 h-4 w-4" />
-            Add from Group Chats
+            <MessageCircle className="mr-2 h-4 w-4" />
+            Open Group Chat
           </Button>
         </div>
       </div>
