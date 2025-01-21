@@ -56,6 +56,7 @@ export const groupsApi = {
         budget: 0,
         spent: 0,
         activityIds: [],
+        activities: [],
         participants: [],
       },
     }
@@ -184,28 +185,31 @@ export const groupsApi = {
     )
   },
 
-  // Real-time listeners
-  subscribeToGroup(groupId: string, callback: (group: Group) => void): () => void {
+  // Real-time subscription methods
+  subscribeToGroup(groupId: string, onUpdate: (group: Group) => void): () => void {
     const groupRef = ref(database, `groups/${groupId}`)
+
+    // Set up real-time listener
     onValue(groupRef, (snapshot) => {
       if (snapshot.exists()) {
-        const rawGroup = snapshot.val()
-        // Convert ISO strings back to Date objects
-        const processedGroup = {
-          ...rawGroup,
+        const groupData = snapshot.val()
+        const group: Group = {
           id: snapshot.key!,
+          ...groupData,
           plan: {
-            ...rawGroup.plan,
-            activities: rawGroup.plan.activities?.map((activity: ScheduledActivity) => ({
+            ...groupData.plan,
+            // Convert ISO strings back to Date objects for activities
+            activities: groupData.plan.activities?.map((activity: ScheduledActivity) => ({
               ...activity,
               startTime: activity.startTime ? new Date(activity.startTime) : undefined
             }))
           }
         }
-        callback(processedGroup)
+        onUpdate(group)
       }
     })
 
+    // Return cleanup function
     return () => off(groupRef)
   },
 

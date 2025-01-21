@@ -196,7 +196,7 @@ function CalendarCell({
     <div
       ref={drop}
       className={`h-16 border-t p-1 relative transition-colors ${isOver && canDrop ? "bg-primary/20" :
-          isOver && !canDrop ? "bg-destructive/20" : ""
+        isOver && !canDrop ? "bg-destructive/20" : ""
         }`}
     >
       {cellActivities.map((activity) => {

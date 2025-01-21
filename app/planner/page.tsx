@@ -71,24 +71,33 @@ export default function PlannerPage() {
       setGroups(fetchedGroups)
     }
     loadGroups()
+  }, []) // Only run once on mount
 
-    // Set up real-time listener for current group if one is selected
-    let unsubscribe: (() => void) | null = null
-    if (currentGroup) {
-      unsubscribe = groupsApi.subscribeToGroup(currentGroup.id, (updatedGroup) => {
-        setGroups((prevGroups) =>
-          prevGroups.map((g) => (g.id === currentGroup.id ? updatedGroup : g))
-        )
+  // Set up real-time listener for current group
+  useEffect(() => {
+    const groupId = currentGroup?.id
+    if (!groupId) return
+
+    const unsubscribe = groupsApi.subscribeToGroup(groupId, (updatedGroup) => {
+      setCurrentGroup(prev => {
+        // Only update if the data has actually changed
+        if (JSON.stringify(prev) === JSON.stringify(updatedGroup)) return prev
+        return updatedGroup
       })
-    }
+      setGroups(prevGroups => {
+        const newGroups = prevGroups.map(g =>
+          g.id === updatedGroup.id ? updatedGroup : g
+        )
+        // Only update if the data has actually changed
+        if (JSON.stringify(prevGroups) === JSON.stringify(newGroups)) return prevGroups
+        return newGroups
+      })
+    })
 
-    // Cleanup subscription on unmount or when currentGroup changes
     return () => {
-      if (unsubscribe) {
-        unsubscribe()
-      }
+      unsubscribe()
     }
-  }, [currentGroup])
+  }, [currentGroup?.id]) // Only re-run if the group ID changes
 
   const handleCreateGroup = useCallback(async (groupName: string) => {
     try {

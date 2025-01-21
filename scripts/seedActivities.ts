@@ -1,19 +1,5 @@
-import { initializeApp } from "firebase/app"
-import { getDatabase, ref, set } from "firebase/database"
-
-const firebaseConfig = {
-  apiKey: "AIzaSyDxlyFjOMFfzIvc5i6QxSxlERscubpM-F4",
-  authDomain: "tobeyreturns.firebaseapp.com",
-  databaseURL: "https://tobeyreturns-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "tobeyreturns",
-  storageBucket: "tobeyreturns.firebasestorage.app",
-  messagingSenderId: "499602881066",
-  appId: "1:499602881066:web:a02176a4811b28ca092153"
-}
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig)
-const database = getDatabase(app)
+import { ref, set } from "firebase/database"
+import { database } from "../firebaseConfig"
 
 const sampleActivities = {
   "paragliding": {
