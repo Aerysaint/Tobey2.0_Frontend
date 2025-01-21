@@ -14,6 +14,7 @@ import { GroupSelection } from "../components/group-selection"
 import { AIAssistantChat } from "../components/ai-assistant-chat"
 import { toast, Toaster } from "sonner"
 import { groupsApi } from "../services/groupsApi"
+import { GroupChatPanel } from "../components/group-chat-panel"
 
 const defaultPlan: Plan = {
   id: "default",
@@ -57,7 +58,7 @@ export default function PlannerPage() {
   const router = useRouter()
   const [plan, dispatch] = useReducer(planReducer, defaultPlan)
   const [isChatOpen, setIsChatOpen] = useState(false)
-  const [showGroupChats, setShowGroupChats] = useState(false)
+  const [showGroupChat, setShowGroupChat] = useState(false)
   const [showCalendar, setShowCalendar] = useState(true)
   const [travelChatMessages, setTravelChatMessages] = useState<ChatMessage[]>([])
   const [groups, setGroups] = useState<{ id: string; name: string; plan: Plan }[]>([])
@@ -243,14 +244,13 @@ export default function PlannerPage() {
   )
 
   const handleToggleGroupChats = useCallback(() => {
-    setShowGroupChats((prev) => !prev)
-    setShowCalendar(false)
+    setShowGroupChat((prev) => !prev)
   }, [])
 
   const handleOpenCalendar = useCallback((groupId: string) => {
     setCurrentGroup(groups.find((g) => g.id === groupId) || null)
     setShowCalendar(true)
-    setShowGroupChats(false)
+    setShowGroupChat(false)
   }, [groups])
 
   const handleClearAllNodes = useCallback(async () => {
@@ -330,6 +330,7 @@ export default function PlannerPage() {
             }
           }}
           onClearAllNodes={handleClearAllNodes}
+          onToggleGroupChats={handleToggleGroupChats}
         />
         <div className="flex flex-1 overflow-hidden">
           <Sidebar
@@ -339,37 +340,17 @@ export default function PlannerPage() {
             currentGroupId={currentGroup?.id || ""}
           />
           <div className="flex-1 overflow-hidden">
-            {showGroupChats ? (
-              <GroupChatsPage
-                groups={groups}
-                onBack={() => {
-                  setShowGroupChats(false)
-                  setShowCalendar(true)
-                }}
-                onOpenCalendar={handleOpenCalendar}
-                onSelectGroup={(groupId) => {
-                  setCurrentGroup(groups.find((g) => g.id === groupId) || null)
-                  setShowCalendar(true)
-                  setShowGroupChats(false)
-                }}
-              />
-            ) : (
-              <div className="flex-1 overflow-hidden">
-                <Calendar
-                  plan={currentGroup?.plan || defaultPlan}
-                  onAddActivity={handleAddActivity}
-                  onRemoveActivity={handleRemoveActivity}
-                />
-              </div>
-            )}
-          </div>
-          {isChatOpen && (
-            <ChatPanel
+            <Calendar
               plan={currentGroup?.plan || defaultPlan}
-              isOpen={isChatOpen}
-              onToggle={handleToggleChat}
-              messages={travelChatMessages}
-              setMessages={setTravelChatMessages}
+              onAddActivity={handleAddActivity}
+              onRemoveActivity={handleRemoveActivity}
+            />
+          </div>
+          {showGroupChat && currentGroup && (
+            <GroupChatPanel
+              groupId={currentGroup.id}
+              groupName={currentGroup.name}
+              onClose={() => setShowGroupChat(false)}
             />
           )}
           <AIAssistantChat

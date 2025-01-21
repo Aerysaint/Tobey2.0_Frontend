@@ -1,7 +1,6 @@
 "use client"
 
-import { useState } from "react"
-import { MapPin, Clock, Plus, Trash } from "lucide-react"
+import { MapPin, Clock, Trash } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import type { Activity } from "@/types"
@@ -9,13 +8,10 @@ import { useDrag } from "react-dnd"
 
 interface ActivityCardProps {
   activity: Activity
-  onAdd?: () => void
   onRemove?: () => void
 }
 
-export function ActivityCard({ activity, onAdd, onRemove }: ActivityCardProps) {
-  const [showDetails, setShowDetails] = useState(false)
-
+export function ActivityCard({ activity, onRemove }: ActivityCardProps) {
   const [{ isDragging }, dragRef] = useDrag({
     type: "ACTIVITY",
     item: activity,
@@ -25,7 +21,7 @@ export function ActivityCard({ activity, onAdd, onRemove }: ActivityCardProps) {
   })
 
   return (
-    <div ref={dragRef} style={{ opacity: isDragging ? 0.5 : 1 }}>
+    <div ref={dragRef as any} style={{ opacity: isDragging ? 0.5 : 1 }}>
       <Card className="hover:bg-muted/50 transition-colors cursor-move">
         <CardContent className="flex flex-col gap-3 p-3">
           <div className="flex items-start gap-3">
@@ -47,26 +43,13 @@ export function ActivityCard({ activity, onAdd, onRemove }: ActivityCardProps) {
               </p>
             </div>
           </div>
-          <div className="flex justify-between items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1"
-              onClick={() => setShowDetails(!showDetails)}
-            >
-              {showDetails ? "Hide Details" : "Show Details"}
-            </Button>
-            {onAdd && (
-              <Button
-                variant="default"
-                size="sm"
-                className="flex-none"
-                onClick={onAdd}
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
-            )}
-            {onRemove && (
+          {activity.description && (
+            <p className="text-sm text-muted-foreground line-clamp-2">
+              {activity.description}
+            </p>
+          )}
+          {onRemove && (
+            <div className="flex justify-end">
               <Button
                 variant="destructive"
                 size="sm"
@@ -75,12 +58,7 @@ export function ActivityCard({ activity, onAdd, onRemove }: ActivityCardProps) {
               >
                 <Trash className="h-4 w-4" />
               </Button>
-            )}
-          </div>
-          {showDetails && (
-            <p className="text-sm text-muted-foreground">
-              {activity.description}
-            </p>
+            </div>
           )}
         </CardContent>
       </Card>

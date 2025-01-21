@@ -1,4 +1,4 @@
-import { database } from "../firebaseConfig"
+import { database } from "../lib/firebase"
 import { ref, set } from "firebase/database"
 import data from "../db.json"
 

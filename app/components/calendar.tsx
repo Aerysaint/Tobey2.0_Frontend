@@ -6,8 +6,8 @@ import type { Activity, Plan } from "@/types"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { X, ChevronLeft, ChevronRight, CalendarIcon } from "lucide-react"
-import { useState } from "react"
+import { X, ChevronLeft, ChevronRight, CalendarIcon, Clock } from "lucide-react"
+import { useState, useRef } from "react"
 import { Calendar as CalendarPicker } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 
@@ -21,6 +21,17 @@ export function Calendar({ plan, onAddActivity, onRemoveActivity }: CalendarProp
   const [startDate, setStartDate] = useState(startOfWeek(new Date()))
   const days = Array.from({ length: 7 }, (_, i) => addDays(startDate, i))
   const hours = Array.from({ length: 24 }, (_, i) => i)
+  const colorMapRef = useRef(new Map<string, string>())
+
+    // Update color map with new activities only
+    ; (plan.activities || []).forEach(activity => {
+      if (!colorMapRef.current.has(activity.id)) {
+        const hue = Math.floor(Math.random() * 360)
+        const saturation = Math.floor(Math.random() * 20 + 60)
+        const lightness = Math.floor(Math.random() * 15 + 20)
+        colorMapRef.current.set(activity.id, `hsl(${hue}, ${saturation}%, ${lightness}%)`)
+      }
+    })
 
   const getDayBudget = (day: Date) => {
     return (plan.activities || []).reduce((total, activity) => {
@@ -90,7 +101,7 @@ export function Calendar({ plan, onAddActivity, onRemoveActivity }: CalendarProp
 
             {/* Calendar grid */}
             {days.map((day) => (
-              <div key={day.toISOString()} className="relative">
+              <div key={day.toISOString()}>
                 {hours.map((hour) => (
                   <CalendarCell
                     key={`${day.toISOString()}-${hour}`}
@@ -99,6 +110,7 @@ export function Calendar({ plan, onAddActivity, onRemoveActivity }: CalendarProp
                     plan={plan}
                     onAddActivity={onAddActivity}
                     onRemoveActivity={onRemoveActivity}
+                    activityColors={colorMapRef.current}
                   />
                 ))}
               </div>
@@ -110,19 +122,23 @@ export function Calendar({ plan, onAddActivity, onRemoveActivity }: CalendarProp
   )
 }
 
+interface CalendarCellProps {
+  day: Date
+  hour: number
+  plan: Plan
+  onAddActivity: (activity: Activity, startTime: Date) => void
+  onRemoveActivity: (activityId: string) => void
+  activityColors: Map<string, string>
+}
+
 function CalendarCell({
   day,
   hour,
   plan,
   onAddActivity,
   onRemoveActivity,
-}: {
-  day: Date
-  hour: number
-  plan: Plan
-  onAddActivity: (activity: Activity, startTime: Date) => void
-  onRemoveActivity: (activityId: string) => void
-}) {
+  activityColors,
+}: CalendarCellProps) {
   const [{ isOver, canDrop }, drop] = useDrop(
     () => ({
       accept: "ACTIVITY",
@@ -194,7 +210,7 @@ function CalendarCell({
 
   return (
     <div
-      ref={drop}
+      ref={drop as any}
       className={`h-16 border-t p-1 relative transition-colors ${isOver && canDrop ? "bg-primary/20" :
         isOver && !canDrop ? "bg-destructive/20" : ""
         }`}
@@ -208,28 +224,48 @@ function CalendarCell({
         if (hour !== activityStartHour) return null
 
         const heightInCells = activity.duration
+        const backgroundColor = activityColors.get(activity.id)
 
         return (
           <div
             key={activity.id}
-            className="group absolute rounded-md bg-primary p-1 text-xs text-primary-foreground overflow-hidden"
+            className="group absolute inset-x-1 rounded-md overflow-hidden"
             style={{
               top: 0,
               height: `${heightInCells * 64}px`,
-              left: "4px",
-              right: "4px",
-              zIndex: 10
+              zIndex: 10,
+              backgroundColor
             }}
           >
-            <div className="overflow-hidden text-ellipsis whitespace-nowrap">{activity.title}</div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="absolute right-0 top-0 hidden h-4 w-4 rounded-full p-0 group-hover:flex"
-              onClick={() => onRemoveActivity(activity.id)}
-            >
-              <X className="h-3 w-3" />
-            </Button>
+            <div className="relative h-full p-2 text-white">
+              <div className="flex items-start gap-2">
+                <img
+                  src={activity.image || "/placeholder.svg"}
+                  alt={activity.title}
+                  className="h-12 w-12 rounded object-cover flex-none"
+                />
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-medium text-sm truncate">{activity.title}</h4>
+                  <p className="text-xs text-white/90 truncate">
+                    <Clock className="inline h-3 w-3 mr-1" />
+                    {activity.duration}h
+                  </p>
+                  {activity.description && (
+                    <p className="text-xs text-white/75 line-clamp-2 mt-1">
+                      {activity.description}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 top-1 hidden h-6 w-6 rounded-full p-0 text-white opacity-90 hover:opacity-100 hover:bg-white/20 group-hover:flex"
+                onClick={() => onRemoveActivity(activity.id)}
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
           </div>
         )
       })}

@@ -1,5 +1,5 @@
 import type { Plan, Activity } from "@/types"
-import { database } from "../../firebaseConfig"
+import { database } from "@/lib/firebase"
 import { ref, get, set, push, remove, onValue, off } from "firebase/database"
 
 interface Group {

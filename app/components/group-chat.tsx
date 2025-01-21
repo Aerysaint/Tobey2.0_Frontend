@@ -3,7 +3,7 @@ import { Send } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { database } from "../../firebaseConfig"
+import { database } from "@/lib/firebase"
 import { ref, push, onValue, off } from "firebase/database"
 
 interface Message {

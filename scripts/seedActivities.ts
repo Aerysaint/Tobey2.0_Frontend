@@ -1,5 +1,5 @@
 import { ref, set } from "firebase/database"
-import { database } from "../firebaseConfig"
+import { database } from "../lib/firebase"
 
 const sampleActivities = {
   "paragliding": {

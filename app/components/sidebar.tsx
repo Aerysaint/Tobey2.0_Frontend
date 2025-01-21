@@ -10,11 +10,14 @@ import { GroupChat } from "./group-chat"
 import type { Plan, Activity } from "@/types"
 import { groupsApi } from "../services/groupsApi"
 import { toast } from "sonner"
+import { Dialog, DialogContent } from "@/components/ui/dialog"
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
 
 interface SidebarProps {
   plan: Plan
   onToggleGroupChats: () => void
-  onAddActivity: (activity: Activity, startTime?: Date) => void
+  onAddActivity: (activity: Activity, startTime: Date) => Promise<void>
   currentGroupId?: string | null
 }
 
@@ -30,6 +33,8 @@ export function Sidebar({
   const [showChat, setShowChat] = useState(false)
   const [placesToGoHeight, setPlacesToGoHeight] = useState(50) // percentage
   const [availableActivities, setAvailableActivities] = useState<Activity[]>([])
+  const [isSearchOverlayOpen, setIsSearchOverlayOpen] = useState(false)
+  const [isAIEnabled, setIsAIEnabled] = useState(false)
 
   // Load all available activities
   useEffect(() => {
@@ -119,10 +124,11 @@ export function Sidebar({
             <div className="relative">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search activities..."
+                placeholder={isAIEnabled ? "Describe what you're looking for..." : "Search activities..."}
                 className="pl-8"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                onFocus={() => setIsSearchOverlayOpen(true)}
               />
             </div>
           </div>
@@ -133,22 +139,14 @@ export function Sidebar({
               ) : searchQuery ? (
                 searchResults.length > 0 ? (
                   searchResults.map((activity) => (
-                    <ActivityCard
-                      key={activity.id}
-                      activity={activity}
-                      onAdd={() => onAddActivity(activity)}
-                    />
+                    <ActivityCard key={activity.id} activity={activity} />
                   ))
                 ) : (
                   <div className="text-center text-muted-foreground">No results found</div>
                 )
               ) : (
                 availableActivities.map((activity) => (
-                  <ActivityCard
-                    key={activity.id}
-                    activity={activity}
-                    onAdd={() => onAddActivity(activity)}
-                  />
+                  <ActivityCard key={activity.id} activity={activity} />
                 ))
               )}
             </div>
@@ -166,6 +164,56 @@ export function Sidebar({
           </Button>
         </div>
       </div>
+
+      {/* Search Overlay */}
+      <Dialog open={isSearchOverlayOpen} onOpenChange={setIsSearchOverlayOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="ai-mode"
+                  checked={isAIEnabled}
+                  onCheckedChange={setIsAIEnabled}
+                />
+                <Label htmlFor="ai-mode" className="flex items-center gap-2">
+                  <Bot className="h-4 w-4" />
+                  AI Search
+                </Label>
+              </div>
+            </div>
+            <div className="relative">
+              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder={isAIEnabled ? "Describe what you're looking for..." : "Search activities..."}
+                className="pl-8"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <ScrollArea className="h-[400px]">
+              <div className="space-y-4 p-2">
+                {isSearching ? (
+                  <div className="text-center text-muted-foreground">Searching...</div>
+                ) : searchQuery ? (
+                  searchResults.length > 0 ? (
+                    searchResults.map((activity) => (
+                      <ActivityCard key={activity.id} activity={activity} />
+                    ))
+                  ) : (
+                    <div className="text-center text-muted-foreground">No results found</div>
+                  )
+                ) : (
+                  availableActivities.map((activity) => (
+                    <ActivityCard key={activity.id} activity={activity} />
+                  ))
+                )}
+              </div>
+            </ScrollArea>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

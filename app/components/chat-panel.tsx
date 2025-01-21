@@ -153,9 +153,8 @@ export function ChatPanel({ plan, isOpen, onToggle, messages, setMessages }: Cha
           {localMessages.map((message, index) => (
             <div
               key={index}
-              className={`flex items-start gap-3 ${
-                message.role === 'user' || message.role === 'user2' ? 'flex-row-reverse' : ''
-              }`}
+              className={`flex items-start gap-3 ${message.role === 'user' || message.role === 'user2' ? 'flex-row-reverse' : ''
+                }`}
             >
               <Avatar className="h-8 w-8">
                 {message.role === 'assistant' ? (
@@ -167,11 +166,10 @@ export function ChatPanel({ plan, isOpen, onToggle, messages, setMessages }: Cha
               <div className="flex flex-col">
                 <span className="text-xs font-medium mb-1">{message.name}</span>
                 <div
-                  className={`rounded-lg p-3 ${
-                    message.role === 'user' || message.role === 'user2'
+                  className={`rounded-lg p-3 ${message.role === 'user' || message.role === 'user2'
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-muted'
-                  }`}
+                    }`}
                 >
                   {message.content}
                 </div>
