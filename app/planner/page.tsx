@@ -13,8 +13,10 @@ import type { Plan, Activity, ChatMessage } from "@/types"
 import { GroupSelection } from "../components/group-selection"
 import { AIAssistantChat } from "../components/ai-assistant-chat"
 import { toast, Toaster } from "sonner"
-import { groupsApi } from "../services/groupsApi"
+import { groupsApi, type Group } from "../../services/groupsApi"
 import { GroupChatPanel } from "../components/group-chat-panel"
+import { useAuth } from "@/contexts/auth-context"
+import { Loader2 } from "lucide-react"
 
 const defaultPlan: Plan = {
   id: "default",
@@ -56,23 +58,67 @@ function planReducer(state: Plan, action: Action): Plan {
 export default function PlannerPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
+  const { user } = useAuth()
+  const [isLoading, setIsLoading] = useState(true)
+  const [group, setGroup] = useState<Group | null>(null)
   const [plan, dispatch] = useReducer(planReducer, defaultPlan)
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [showGroupChat, setShowGroupChat] = useState(false)
   const [showCalendar, setShowCalendar] = useState(true)
   const [travelChatMessages, setTravelChatMessages] = useState<ChatMessage[]>([])
-  const [groups, setGroups] = useState<{ id: string; name: string; plan: Plan }[]>([])
-  const [currentGroup, setCurrentGroup] = useState<{ id: string; name: string; plan: Plan } | null>(null)
+  const [currentGroup, setCurrentGroup] = useState<Group | null>(null)
   const [isAIChatOpen, setIsAIChatOpen] = useState(false)
 
-  // Load groups on mount and set up real-time listeners
+  // Check authentication and group access
   useEffect(() => {
-    const loadGroups = async () => {
-      const fetchedGroups = await groupsApi.getGroups()
-      setGroups(fetchedGroups)
+    const checkAccess = async () => {
+      if (!user) {
+        router.replace("/")
+        return
+      }
+
+      const groupId = searchParams.get("group")
+      if (!groupId) {
+        router.replace("/home")
+        return
+      }
+
+      try {
+        const groupData = await groupsApi.getGroup(groupId)
+        if (!groupData) {
+          toast.error("Group not found")
+          router.replace("/home")
+          return
+        }
+
+        // Check if user is a member
+        if (!groupData.members || !groupData.members[user.uid]) {
+          toast.error("You don't have access to this group")
+          router.replace("/home")
+          return
+        }
+
+        setGroup(groupData)
+        setCurrentGroup(groupData)
+      } catch (error) {
+        console.error("Error checking group access:", error)
+        toast.error("Failed to load group")
+        router.replace("/home")
+      } finally {
+        setIsLoading(false)
+      }
     }
-    loadGroups()
-  }, []) // Only run once on mount
+
+    checkAccess()
+  }, [user, router, searchParams])
+
+  // Handle AI chat from URL
+  useEffect(() => {
+    const isAIChat = searchParams.get("chat") === "ai"
+    if (isAIChat && !currentGroup) {
+      setIsAIChatOpen(true)
+    }
+  }, [searchParams, currentGroup])
 
   // Set up real-time listener for current group
   useEffect(() => {
@@ -81,67 +127,34 @@ export default function PlannerPage() {
 
     const unsubscribe = groupsApi.subscribeToGroup(groupId, (updatedGroup) => {
       setCurrentGroup(prev => {
-        // Only update if the data has actually changed
         if (JSON.stringify(prev) === JSON.stringify(updatedGroup)) return prev
         return updatedGroup
-      })
-      setGroups(prevGroups => {
-        const newGroups = prevGroups.map(g =>
-          g.id === updatedGroup.id ? updatedGroup : g
-        )
-        // Only update if the data has actually changed
-        if (JSON.stringify(prevGroups) === JSON.stringify(newGroups)) return prevGroups
-        return newGroups
       })
     })
 
     return () => {
       unsubscribe()
     }
-  }, [currentGroup?.id]) // Only re-run if the group ID changes
+  }, [currentGroup?.id])
 
   const handleCreateGroup = useCallback(async (groupName: string) => {
+    if (!user) {
+      toast.error("Please sign in to create a group")
+      return
+    }
+
     try {
-      const newGroup = await groupsApi.createGroup(groupName)
-      setGroups((prev) => [...prev, newGroup])
-      setCurrentGroup(newGroup)
-      setShowCalendar(true)
-      setIsAIChatOpen(false)
-      router.push(`/planner?group=${newGroup.id}`)
+      const groupId = await groupsApi.createGroup(groupName, user.uid, user.displayName || "Anonymous")
+      const group = await groupsApi.getGroup(groupId)
+      if (group) {
+        setCurrentGroup(group)
+        toast.success("Group created successfully!")
+      }
     } catch (error) {
       console.error("Error creating group:", error)
       toast.error("Failed to create group. Please try again.")
     }
-  }, [router])
-
-  // Handle group joining from URL
-  useEffect(() => {
-    const groupId = searchParams.get("group")
-    const isAIChat = searchParams.get("chat") === "ai"
-
-    if (groupId && !currentGroup) {
-      const checkGroup = async () => {
-        const group = await groupsApi.getGroup(groupId)
-        if (group) {
-          setCurrentGroup(group)
-          setIsAIChatOpen(false)
-          toast.success("Group Joined", {
-            description: `You've joined the group: ${group.name}`,
-          })
-        } else {
-          toast.error("Group Not Found", {
-            description: "Please check the group ID and try again.",
-          })
-          setTimeout(() => {
-            router.replace("/")
-          }, 1500)
-        }
-      }
-      checkGroup()
-    } else if (isAIChat && !currentGroup) {
-      setIsAIChatOpen(true)
-    }
-  }, [searchParams, router, currentGroup])
+  }, [user])
 
   const handleUpdateBudget = useCallback(
     async (amount: number) => {
@@ -215,7 +228,6 @@ export default function PlannerPage() {
       }
 
       try {
-        // Get the activity to calculate cost reduction
         const activity = await groupsApi.getActivity(activityId)
         if (!activity) {
           toast.error("Activity not found")
@@ -226,8 +238,8 @@ export default function PlannerPage() {
           ...currentGroup,
           plan: {
             ...currentGroup.plan,
-            activityIds: currentGroup.plan.activityIds.filter(id => id !== activityId),
-            activities: currentGroup.plan.activities.filter(a => a.id !== activityId),
+            activityIds: currentGroup.plan.activityIds.filter((id: string) => id !== activityId),
+            activities: currentGroup.plan.activities.filter((a: Activity) => a.id !== activityId),
             spent: Math.max(0, currentGroup.plan.spent - (activity.cost || 0))
           }
         }
@@ -248,10 +260,9 @@ export default function PlannerPage() {
   }, [])
 
   const handleOpenCalendar = useCallback((groupId: string) => {
-    setCurrentGroup(groups.find((g) => g.id === groupId) || null)
     setShowCalendar(true)
     setShowGroupChat(false)
-  }, [groups])
+  }, [])
 
   const handleClearAllNodes = useCallback(async () => {
     if (!currentGroup) {
@@ -281,6 +292,14 @@ export default function PlannerPage() {
     }
   }, [currentGroup])
 
+  if (isLoading || !group) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+      </div>
+    )
+  }
+
   return (
     <DndProvider backend={HTML5Backend}>
       <div className="flex flex-col h-screen overflow-hidden">
@@ -288,7 +307,7 @@ export default function PlannerPage() {
         <Header
           plan={currentGroup?.plan || defaultPlan}
           onUpdateBudget={handleUpdateBudget}
-          onHome={() => router.push("/")}
+          onHome={() => router.push("/home")}
           onShare={() => {
             if (currentGroup) {
               const groupId = currentGroup.id
@@ -358,13 +377,10 @@ export default function PlannerPage() {
             onClose={() => {
               setIsAIChatOpen(false)
               if (!currentGroup) {
-                router.push("/")
+                router.push("/home")
               }
             }}
-            onCreateGroup={(groupName) => {
-              handleCreateGroup(groupName)
-              setIsAIChatOpen(false)  // Close AI chat after group creation
-            }}
+            onCreateGroup={handleCreateGroup}
           />
         </div>
       </div>

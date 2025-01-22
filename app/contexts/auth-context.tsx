@@ -3,15 +3,17 @@
 import { createContext, useContext, useEffect, useState } from "react"
 import { User, onAuthStateChanged } from "firebase/auth"
 import { auth } from "@/lib/firebase"
+import { database } from "@/lib/firebase"
+import { ref, set, get } from "firebase/database"
 
-interface AuthContextType {
+export interface AuthContextType {
   user: User | null
   isLoading: boolean
 }
 
-const AuthContext = createContext<AuthContextType>({
+export const AuthContext = createContext<AuthContextType>({
   user: null,
-  isLoading: true,
+  isLoading: true
 })
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -36,6 +38,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
+    const createOrUpdateUser = async (user: User) => {
+      const userRef = ref(database, `users/${user.uid}`)
+      const snapshot = await get(userRef)
+
+      if (!snapshot.exists()) {
+        // Create new user record
+        await set(userRef, {
+          uid: user.uid,
+          displayName: user.displayName,
+          email: user.email,
+          photoURL: user.photoURL,
+          groups: {},
+          createdAt: Date.now(),
+          lastLoginAt: Date.now()
+        })
+      } else {
+        // Update last login time
+        await set(userRef, {
+          ...snapshot.val(),
+          lastLoginAt: Date.now(),
+          // Update these fields in case they changed in Google
+          displayName: user.displayName,
+          email: user.email,
+          photoURL: user.photoURL,
+        })
+      }
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         // If user exists in Firebase, verify session
@@ -48,6 +78,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             await auth.signOut()
             setUser(null)
           } else {
+            // Create/update user in Realtime Database
+            await createOrUpdateUser(user)
             setUser(user)
           }
         } catch (error) {

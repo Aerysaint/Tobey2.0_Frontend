@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { AIAssistantChat } from "../components/ai-assistant-chat";
-import { groupsApi } from "../services/groupsApi";
+import { groupsApi } from "../../services/groupsApi";
 import { toast, Toaster } from "sonner";
 import { RecentGroups } from "../components/recent-groups";
 import { useAuth } from "@/contexts/auth-context";
@@ -38,21 +38,36 @@ export default function HomePage() {
   }, [user, isAuthLoading, router]);
 
   const handleJoinGroup = async () => {
-    if (groupId.trim()) {
-      const group = await groupsApi.getGroup(groupId.trim());
-      if (group) {
-        router.push(`/planner?group=${groupId}`);
-      } else {
-        toast.error("Group Not Found", {
-          description: "Please check the group ID and try again.",
-        });
-      }
-    } else {
-      toast.error("Invalid Input", {
-        description: "Please enter a group ID",
-      });
+    if (!groupId.trim() || !user) {
+      toast.error("Please enter a group ID")
+      return
     }
-  };
+
+    setIsLoading(true)
+    try {
+      const group = await groupsApi.getGroup(groupId.trim())
+      if (!group) {
+        toast.error("Group not found")
+        return
+      }
+
+      // Check if user is already a member
+      if (group.members && group.members[user.uid]) {
+        router.push(`/planner?group=${groupId}`)
+        return
+      }
+
+      // Add user to group
+      await groupsApi.joinGroup(groupId.trim(), user.uid, user.displayName || "Anonymous")
+      toast.success("Successfully joined group")
+      router.push(`/planner?group=${groupId}`)
+    } catch (error) {
+      console.error("Error joining group:", error)
+      toast.error("Failed to join group")
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   const handleChatNow = () => {
     setIsAIChatOpen(true);
@@ -166,43 +181,43 @@ export default function HomePage() {
 
           <div className="grid md:grid-cols-2 gap-6">
             <Card className="relative overflow-hidden">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-2xl">Join a Group</CardTitle>
+              <CardHeader>
+                <CardTitle>Join a Group</CardTitle>
                 <CardDescription>
-                  Enter a group ID to join an existing trip plan and collaborate with others.
+                  Enter the group code shared by your travel companions
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="flex gap-2">
                   <Input
-                    placeholder="Enter group ID..."
+                    placeholder="Enter group code"
                     value={groupId}
                     onChange={(e) => setGroupId(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        handleJoinGroup();
-                      }
-                    }}
+                    onKeyDown={(e) => e.key === "Enter" && handleJoinGroup()}
                   />
-                  <Button onClick={handleJoinGroup}>
+                  <Button onClick={handleJoinGroup} disabled={isLoading || !groupId.trim()}>
+                    {isLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : (
+                      <ArrowRight className="h-4 w-4 mr-2" />
+                    )}
                     Join
-                    <ArrowRight className="ml-2 h-4 w-4" />
                   </Button>
                 </div>
               </CardContent>
             </Card>
 
-            <Card className="relative overflow-hidden">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-2xl">Ask AI Assistant</CardTitle>
+            <Card>
+              <CardHeader>
+                <CardTitle>Create a New Group</CardTitle>
                 <CardDescription>
-                  Get personalized travel recommendations and create your perfect itinerary with AI assistance.
+                  Chat with our AI assistant to create a personalized travel plan
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <Button variant="secondary" className="w-full sm:w-auto" size="lg" onClick={handleChatNow}>
-                  Chat now
-                  <ArrowRight className="ml-2 h-4 w-4" />
+                <Button onClick={handleChatNow} className="w-full">
+                  <ArrowRight className="h-4 w-4 mr-2" />
+                  Chat Now
                 </Button>
               </CardContent>
             </Card>
