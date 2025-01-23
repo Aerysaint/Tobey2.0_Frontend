@@ -1,0 +1,25 @@
+{
+  "rules": {
+    "users": {
+      "$uid": {
+        ".read": "$uid === auth.uid",
+        ".write": "$uid === auth.uid"
+      }
+    },
+    "groups": {
+      "$groupId": {
+        ".read": "data.child('members').child(auth.uid).exists()",
+        ".write": "data.child('members').child(auth.uid).exists() || (!data.exists() && newData.child('members').child(auth.uid).exists())",
+        "members": {
+          "$userId": {
+            ".write": "data.parent().parent().child('members').child(auth.uid).exists()"
+          }
+        }
+      }
+    },
+    "activities": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
+    }
+  }
+} 
