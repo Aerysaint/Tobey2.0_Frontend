@@ -1,24 +1,12 @@
 export interface Activity {
   id: string
   title: string
-  location: string
   description: string
+  location: string
   duration: number
-  image: string
   cost: number
-  type: string
-  startTime?: Date
-}
-
-export interface ChatMessage {
-  id: string
-  content: string
-  sender: {
-    id: string
-    role: "ai" | "customer"
-    name: string
-  }
-  timestamp: Date
+  image: string
+  startTime: Date
 }
 
 export interface Plan {
@@ -31,3 +19,23 @@ export interface Plan {
   participants: string[]
 }
 
+export interface ChatMessage {
+  role: string
+  name: string
+  content: string
+}
+
+export interface UserData {
+  uid: string
+  displayName: string
+  email: string
+  photoURL: string
+  groups: {
+    [groupId: string]: {
+      joinedAt: number
+      role: 'member' | 'admin'
+    }
+  }
+  createdAt: number
+  lastLoginAt: number
+}

@@ -1,25 +1,20 @@
 {
   "rules": {
     "users": {
+      ".read": "auth != null",
       "$uid": {
-        ".read": "$uid === auth.uid",
-        ".write": "$uid === auth.uid"
+        ".write": "auth != null && auth.uid == $uid"
       }
     },
     "groups": {
+      ".read": "auth != null",
       "$groupId": {
-        ".read": "data.child('members').child(auth.uid).exists()",
-        ".write": "data.child('members').child(auth.uid).exists() || (!data.exists() && newData.child('members').child(auth.uid).exists())",
-        "members": {
-          "$userId": {
-            ".write": "data.parent().parent().child('members').child(auth.uid).exists()"
-          }
-        }
+        ".write": "auth != null && (data.child('members').child(auth.uid).exists() || (!data.exists() && newData.child('members').child(auth.uid).exists()))"
       }
     },
     "activities": {
       ".read": "auth != null",
-      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'admin'"
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() == 'admin'"
     }
   }
 } 

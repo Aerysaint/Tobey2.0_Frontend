@@ -13,9 +13,9 @@ import type { Plan, Activity, ChatMessage } from "@/types"
 import { GroupSelection } from "../components/group-selection"
 import { AIAssistantChat } from "../components/ai-assistant-chat"
 import { toast, Toaster } from "sonner"
-import { groupsApi, type Group } from "../../services/groupsApi"
+import { groupsApi, type Group } from "@/services/groupsApi"
 import { GroupChatPanel } from "../components/group-chat-panel"
-import { useAuth } from "@/contexts/auth-context"
+import { useAuth } from "@/app/contexts/auth-context"
 import { Loader2 } from "lucide-react"
 
 const defaultPlan: Plan = {

@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { signInWithPopup, getIdToken } from "firebase/auth"
+import { signInWithPopup, getIdToken, signInWithRedirect, getRedirectResult } from "firebase/auth"
 import { Button } from "@/components/ui/button"
 import { auth, googleProvider } from "@/lib/firebase"
-import { useAuth } from "@/contexts/auth-context"
+import { useAuth } from "@/app/contexts/auth-context"
 import { toast, Toaster } from "sonner"
 import { Loader2 } from "lucide-react"
 
@@ -29,44 +29,81 @@ export default function LoginPage() {
   }, [user, router])
 
   const handleGoogleLogin = async () => {
-    if (isLoading) return
-    setIsLoading(true)
+    if (!user) {
+      setIsLoading(true)
+      try {
+        // First try popup
+        try {
+          const result = await signInWithPopup(auth, googleProvider)
+          const idToken = await getIdToken(result.user)
+          await handleLoginSuccess(idToken)
+        } catch (popupError) {
+          console.log("Popup failed, falling back to redirect:", popupError)
+          // If popup fails (blocked), fall back to redirect
+          await signInWithRedirect(auth, googleProvider)
+        }
+      } catch (error) {
+        console.error("Error signing in with Google:", error)
+        toast.error("Failed to sign in with Google", {
+          description: error instanceof Error ? error.message : "Please try again",
+        })
+        setIsLoading(false)
+      }
+    }
+  }
 
+  // Handle redirect result
+  useEffect(() => {
+    const handleRedirectResult = async () => {
+      try {
+        const result = await getRedirectResult(auth)
+        if (result) {
+          const idToken = await getIdToken(result.user)
+          await handleLoginSuccess(idToken)
+        }
+      } catch (error) {
+        console.error("Error handling redirect result:", error)
+        toast.error("Failed to complete sign in", {
+          description: error instanceof Error ? error.message : "Please try again",
+        })
+        setIsLoading(false)
+      }
+    }
+
+    handleRedirectResult()
+  }, [])
+
+  const handleLoginSuccess = async (idToken: string) => {
     try {
-      const result = await signInWithPopup(auth, googleProvider)
-      const idToken = await getIdToken(result.user)
-      console.log("Got ID token, sending to API...")
-
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Accept": "application/json",
         },
         body: JSON.stringify({ idToken }),
       })
 
-      const rawText = await response.text()
-      console.log("Raw API Response:", rawText)
-
-      let data
-      try {
-        data = JSON.parse(rawText)
-      } catch (e) {
-        console.error("Failed to parse response:", e)
-        console.error("Raw response was:", rawText)
-        throw new Error("Invalid server response")
-      }
-
       if (!response.ok) {
-        throw new Error(data?.details || data?.error || "Failed to create session")
+        throw new Error("Failed to create session")
       }
 
-      // After successful login, the auth state will update and trigger the useEffect
+      // Wait for the session data to be processed
+      await new Promise(resolve => setTimeout(resolve, 1000))
+
+      // Check if we have a valid session before redirecting
+      const sessionResponse = await fetch("/api/auth/session")
+      const sessionData = await sessionResponse.json()
+
+      if (!sessionData.session) {
+        throw new Error("Session not established")
+      }
+
+      // Use router.replace to prevent back navigation to login
+      await router.replace("/home")
     } catch (error) {
-      console.error("Error signing in with Google:", error)
-      toast.error("Failed to sign in", {
-        description: error instanceof Error ? error.message : "Please try again later",
+      console.error("Error creating session:", error)
+      toast.error("Failed to create session", {
+        description: error instanceof Error ? error.message : "Please try again",
       })
       setIsLoading(false)
     }

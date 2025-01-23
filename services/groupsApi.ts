@@ -1,6 +1,7 @@
 import type { Plan, Activity } from "@/types"
 import { database } from "@/lib/firebase"
 import { ref, get, set, push, remove, onValue, off, update } from "firebase/database"
+import { DataSnapshot } from "firebase/database"
 
 export interface Group {
   id: string
@@ -11,8 +12,8 @@ export interface Group {
   createdAt: number
 }
 
-interface ScheduledActivity extends Activity {
-  startTime?: string // Store as ISO string for Firebase
+interface ScheduledActivity extends Omit<Activity, 'startTime'> {
+  startTime?: string;
 }
 
 export const groupsApi = {
@@ -23,7 +24,7 @@ export const groupsApi = {
     if (!snapshot.exists()) return []
 
     const groups: Group[] = []
-    snapshot.forEach((childSnapshot) => {
+    snapshot.forEach((childSnapshot: DataSnapshot) => {
       groups.push({
         id: childSnapshot.key!,
         ...childSnapshot.val()
@@ -78,7 +79,7 @@ export const groupsApi = {
       ...group,
       plan: {
         ...group.plan,
-        activities: group.plan.activities?.map(activity => ({
+        activities: group.plan.activities?.map((activity: Activity) => ({
           ...activity,
           startTime: activity.startTime ? new Date(activity.startTime).toISOString() : undefined
         }))
@@ -91,16 +92,10 @@ export const groupsApi = {
 
   // Activity methods
   async getActivities(): Promise<Activity[]> {
-    const activitiesRef = ref(database, 'activities')
-    const snapshot = await get(activitiesRef)
-    if (!snapshot.exists()) return []
-
+    const snapshot = await get(ref(database, 'activities'))
     const activities: Activity[] = []
-    snapshot.forEach((childSnapshot) => {
-      activities.push({
-        id: childSnapshot.key!,
-        ...childSnapshot.val()
-      })
+    snapshot.forEach((activity: DataSnapshot) => {
+      activities.push(activity.val())
     })
     return activities
   },
@@ -162,7 +157,7 @@ export const groupsApi = {
       ...group,
       plan: {
         ...group.plan,
-        activityIds: group.plan.activityIds.filter(id => id !== activityId),
+        activityIds: group.plan.activityIds.filter((id: string) => id !== activityId),
       },
     }
 
@@ -222,9 +217,9 @@ export const groupsApi = {
 
   subscribeToActivities(callback: (activities: Activity[]) => void): () => void {
     const activitiesRef = ref(database, 'activities')
-    onValue(activitiesRef, (snapshot) => {
+    onValue(activitiesRef, (snapshot: DataSnapshot) => {
       const activities: Activity[] = []
-      snapshot.forEach((childSnapshot) => {
+      snapshot.forEach((childSnapshot: DataSnapshot) => {
         activities.push({
           id: childSnapshot.key!,
           ...childSnapshot.val()
@@ -238,20 +233,55 @@ export const groupsApi = {
   },
 
   async joinGroup(groupId: string, userId: string, userDisplayName: string): Promise<void> {
+    // Add user to group
     const groupRef = ref(database, `groups/${groupId}/members/${userId}`)
+    const groupSnapshot = await get(ref(database, `groups/${groupId}`))
+
+    if (!groupSnapshot.exists()) {
+      throw new Error("Group not found")
+    }
+
+    const groupData = groupSnapshot.val()
+
+    // Add user to group members
     await set(groupRef, {
       joinedAt: Date.now(),
-      displayName: userDisplayName
+      displayName: userDisplayName,
+      role: 'member'
+    })
+
+    // Add group to user's groups
+    const userRef = ref(database, `users/${userId}/groups/${groupId}`)
+    await set(userRef, {
+      joinedAt: Date.now(),
+      role: 'member',
+      name: groupData.name
     })
   },
 
   async leaveGroup(groupId: string, userId: string): Promise<void> {
+    // Remove user from group members
     const groupRef = ref(database, `groups/${groupId}/members/${userId}`)
     await set(groupRef, null)
+
+    // Remove group from user's groups
+    const userRef = ref(database, `users/${userId}/groups/${groupId}`)
+    await set(userRef, null)
   },
 
   async isGroupMember(groupId: string, userId: string): Promise<boolean> {
-    const snapshot = await get(ref(database, `groups/${groupId}/members/${userId}`))
-    return snapshot.exists()
+    // Check both group members and user's groups for consistency
+    const [groupSnapshot, userSnapshot] = await Promise.all([
+      get(ref(database, `groups/${groupId}/members/${userId}`)),
+      get(ref(database, `users/${userId}/groups/${groupId}`))
+    ])
+
+    // User is considered a member if they exist in both places
+    return groupSnapshot.exists() && userSnapshot.exists()
+  },
+
+  async getActivityById(activityId: string): Promise<Activity | null> {
+    const snapshot = await get(ref(database, `activities/${activityId}`))
+    return snapshot.exists() ? snapshot.val() : null
   }
 } 

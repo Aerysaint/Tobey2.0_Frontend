@@ -7,10 +7,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { AIAssistantChat } from "../components/ai-assistant-chat";
-import { groupsApi } from "../../services/groupsApi";
+import { groupsApi } from "@/services/groupsApi";
 import { toast, Toaster } from "sonner";
 import { RecentGroups } from "../components/recent-groups";
-import { useAuth } from "@/contexts/auth-context";
+import { useAuth } from "@/app/contexts/auth-context";
 import { auth } from "@/lib/firebase";
 import { signOut } from "firebase/auth";
 import {

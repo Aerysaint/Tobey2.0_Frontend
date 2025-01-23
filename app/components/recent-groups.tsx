@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { groupsApi, type Group } from "@/services/groupsApi"
-import { useAuth } from "@/contexts/auth-context"
+import { useAuth } from "@/app/contexts/auth-context"
 import { toast } from "sonner"
 import { Loader2 } from "lucide-react"
 

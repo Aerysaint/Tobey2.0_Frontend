@@ -3,8 +3,8 @@
 import { createContext, useContext, useEffect, useState } from "react"
 import { User, onAuthStateChanged } from "firebase/auth"
 import { auth } from "@/lib/firebase"
-import { database } from "@/lib/firebase"
-import { ref, set, get } from "firebase/database"
+import { useRouter } from "next/navigation"
+import type { UserData } from "@/types"
 
 export interface AuthContextType {
   user: User | null
@@ -19,85 +19,47 @@ export const AuthContext = createContext<AuthContextType>({
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const router = useRouter()
 
   useEffect(() => {
-    // Check for session cookie first
-    const checkSession = async () => {
-      try {
-        const response = await fetch("/api/auth/session")
-        const data = await response.json()
-
-        // If no valid session, clear any persisted auth state
-        if (!data.session) {
-          await auth.signOut()
-        }
-      } catch (error) {
-        console.error("Error checking session:", error)
-        // On error, assume no session and clear auth state
-        await auth.signOut()
-      }
-    }
-
-    const createOrUpdateUser = async (user: User) => {
-      const userRef = ref(database, `users/${user.uid}`)
-      const snapshot = await get(userRef)
-
-      if (!snapshot.exists()) {
-        // Create new user record
-        await set(userRef, {
-          uid: user.uid,
-          displayName: user.displayName,
-          email: user.email,
-          photoURL: user.photoURL,
-          groups: {},
-          createdAt: Date.now(),
-          lastLoginAt: Date.now()
-        })
-      } else {
-        // Update last login time
-        await set(userRef, {
-          ...snapshot.val(),
-          lastLoginAt: Date.now(),
-          // Update these fields in case they changed in Google
-          displayName: user.displayName,
-          email: user.email,
-          photoURL: user.photoURL,
-        })
-      }
-    }
-
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        // If user exists in Firebase, verify session
-        try {
-          const response = await fetch("/api/auth/session")
-          const data = await response.json()
+      console.log("Auth state changed. User:", user?.uid)
 
-          if (!data.session) {
-            // If no valid session, sign out from Firebase
-            await auth.signOut()
-            setUser(null)
-          } else {
-            // Create/update user in Realtime Database
-            await createOrUpdateUser(user)
-            setUser(user)
+      if (user) {
+        // First set the user to prevent unnecessary redirects
+        setUser(user)
+
+        try {
+          // Create/update user in database through API
+          const userResponse = await fetch("/api/auth/user", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+          })
+
+          if (!userResponse.ok) {
+            const data = await userResponse.json()
+            console.error("Failed to create/update user:", data.error)
+            // Don't sign out here, just log the error
           }
         } catch (error) {
-          console.error("Error verifying session:", error)
-          await auth.signOut()
-          setUser(null)
+          console.error("Error creating/updating user:", error)
+          // Don't sign out here, just log the error
         }
       } else {
         setUser(null)
+        // Only redirect to login if we're not already there
+        if (window.location.pathname !== "/") {
+          router.replace("/")
+        }
       }
+
       setIsLoading(false)
     })
 
-    // Check session on mount
-    checkSession()
-
     return () => unsubscribe()
-  }, [])
+  }, [router])
 
   return (
     <AuthContext.Provider value={{ user, isLoading }}>
