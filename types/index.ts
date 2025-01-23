@@ -39,3 +39,12 @@ export interface UserData {
   createdAt: number
   lastLoginAt: number
 }
+
+export interface Group {
+  id: string
+  name: string
+  plan?: any
+  members: { [uid: string]: { joinedAt: number; displayName: string } }
+  createdBy: string
+  createdAt: number
+}

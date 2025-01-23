@@ -2,15 +2,7 @@ import type { Plan, Activity } from "@/types"
 import { database } from "@/lib/firebase"
 import { ref, get, set, push, remove, onValue, off, update } from "firebase/database"
 import { DataSnapshot } from "firebase/database"
-
-export interface Group {
-  id: string
-  name: string
-  plan?: any
-  members: { [uid: string]: { joinedAt: number; displayName: string } }
-  createdBy: string
-  createdAt: number
-}
+import { Group } from "@/types"
 
 interface ScheduledActivity extends Omit<Activity, 'startTime'> {
   startTime?: string;
