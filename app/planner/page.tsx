@@ -230,20 +230,25 @@ export default function PlannerPage() {
       return
     }
 
-    const isMovingActivity = currentGroup.plan.activityIds.includes(activity.id)
+    // Ensure plan and its arrays exist
+    const currentPlan = currentGroup.plan || { ...defaultPlan }
+    const currentActivities = currentPlan.activities || []
+    const currentActivityIds = currentPlan.activityIds || []
+
+    const isMovingActivity = currentActivityIds.includes(activity.id)
     const activityWithStartTime = { ...existingActivity, startTime }
 
     const updatedGroup = {
       ...currentGroup,
       plan: {
-        ...currentGroup.plan,
+        ...currentPlan,
         activities: isMovingActivity
-          ? currentGroup.plan.activities.map(a => a.id === activity.id ? activityWithStartTime : a)
-          : [...currentGroup.plan.activities, activityWithStartTime],
+          ? currentActivities.map(a => a.id === activity.id ? activityWithStartTime : a)
+          : [...currentActivities, activityWithStartTime],
         activityIds: isMovingActivity
-          ? currentGroup.plan.activityIds
-          : [...currentGroup.plan.activityIds, activity.id],
-        spent: currentGroup.plan.spent + (isMovingActivity ? 0 : (existingActivity.cost || 0)),
+          ? currentActivityIds
+          : [...currentActivityIds, activity.id],
+        spent: (currentPlan.spent || 0) + (isMovingActivity ? 0 : (existingActivity.cost || 0)),
       },
     }
 
