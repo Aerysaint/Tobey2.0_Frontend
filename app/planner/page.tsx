@@ -69,6 +69,7 @@ export default function PlannerPage() {
   const [travelChatMessages, setTravelChatMessages] = useState<ChatMessage[]>([])
   const [currentGroup, setCurrentGroup] = useState<Group | null>(null)
   const [isAIChatOpen, setIsAIChatOpen] = useState(false)
+  const [isUpdating, setIsUpdating] = useState(false)
 
   // Check authentication and group access
   useEffect(() => {
@@ -152,16 +153,14 @@ export default function PlannerPage() {
     if (!groupId) return
 
     const unsubscribe = groupsApi.subscribeToGroup(groupId, (updatedGroup) => {
-      setCurrentGroup(prev => {
-        if (JSON.stringify(prev) === JSON.stringify(updatedGroup)) return prev
-        return updatedGroup
-      })
+      if (isUpdating) return // Skip updates while we're handling a local change
+      setCurrentGroup(updatedGroup)
     })
 
     return () => {
       unsubscribe()
     }
-  }, [currentGroup?.id])
+  }, [currentGroup?.id, isUpdating])
 
   const handleCreateGroup = useCallback(async (groupName: string) => {
     console.log("Creating group:", groupName);
@@ -231,25 +230,36 @@ export default function PlannerPage() {
       return
     }
 
+    const isMovingActivity = currentGroup.plan.activityIds.includes(activity.id)
     const activityWithStartTime = { ...existingActivity, startTime }
 
     const updatedGroup = {
       ...currentGroup,
       plan: {
         ...currentGroup.plan,
-        activityIds: [...(currentGroup.plan.activityIds || []), activity.id],
-        activities: [...(currentGroup.plan.activities || []), activityWithStartTime],
-        spent: (currentGroup.plan.spent || 0) + (existingActivity.cost || 0),
+        activities: isMovingActivity
+          ? currentGroup.plan.activities.map(a => a.id === activity.id ? activityWithStartTime : a)
+          : [...currentGroup.plan.activities, activityWithStartTime],
+        activityIds: isMovingActivity
+          ? currentGroup.plan.activityIds
+          : [...currentGroup.plan.activityIds, activity.id],
+        spent: currentGroup.plan.spent + (isMovingActivity ? 0 : (existingActivity.cost || 0)),
       },
     }
 
     try {
-      await groupsApi.updateGroup(updatedGroup)
+      setIsUpdating(true)
+      // Update local state immediately
       setCurrentGroup(updatedGroup)
-      toast.success("Activity added to calendar")
+      // Then sync with Firebase
+      await groupsApi.updateGroup(updatedGroup)
     } catch (error) {
-      console.error("Error adding activity:", error)
-      toast.error("Failed to add activity")
+      console.error("Error updating activity:", error)
+      toast.error("Failed to update activity")
+      // Revert local state on error
+      setCurrentGroup(currentGroup)
+    } finally {
+      setIsUpdating(false)
     }
   }
 
@@ -277,12 +287,18 @@ export default function PlannerPage() {
           }
         }
 
-        await groupsApi.updateGroup(updatedGroup)
+        setIsUpdating(true)
+        // Update local state immediately
         setCurrentGroup(updatedGroup)
-        toast.success("Activity removed from calendar")
+        // Then sync with Firebase
+        await groupsApi.updateGroup(updatedGroup)
       } catch (error) {
         console.error("Error removing activity:", error)
         toast.error("Failed to remove activity")
+        // Revert local state on error
+        setCurrentGroup(currentGroup)
+      } finally {
+        setIsUpdating(false)
       }
     },
     [currentGroup]

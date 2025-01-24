@@ -1,6 +1,6 @@
 "use client"
 
-import { useDrop } from "react-dnd"
+import { useDrop, useDrag } from "react-dnd"
 import { addDays, format, startOfWeek, isSameDay, addHours, subDays, isWithinInterval, isAfter, isBefore, isEqual } from "date-fns"
 import type { Activity, Plan } from "@/types"
 import { toast } from "sonner"
@@ -130,6 +130,77 @@ export function Calendar({ plan, onAddActivity, onRemoveActivity }: CalendarProp
   )
 }
 
+interface DraggableActivityProps {
+  activity: Activity
+  heightInCells: number
+  backgroundColor: string
+  onRemove: () => void
+  onShowDetails: () => void
+}
+
+function DraggableActivity({ activity, heightInCells, backgroundColor, onRemove, onShowDetails }: DraggableActivityProps) {
+  const [{ isDragging }, drag] = useDrag(() => ({
+    type: "CALENDAR_ACTIVITY",
+    item: { ...activity, source: 'calendar' },
+    collect: (monitor) => ({
+      isDragging: monitor.isDragging(),
+    }),
+  }), [activity])
+
+  return (
+    <div
+      ref={drag as any}
+      className={`group absolute inset-x-1 rounded-md overflow-hidden cursor-move ${isDragging ? 'opacity-50' : ''}`}
+      style={{
+        top: 0,
+        height: `${heightInCells * 64}px`,
+        zIndex: 10,
+        backgroundColor
+      }}
+    >
+      <div className="relative h-full p-2 text-white">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="absolute right-1 top-1 h-6 w-6 rounded-full p-0 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/20"
+          onClick={onRemove}
+        >
+          <X className="h-3 w-3" />
+        </Button>
+
+        <div className="flex items-start gap-2">
+          <img
+            src={activity.image || "/placeholder.svg"}
+            alt={activity.title}
+            className="h-12 w-12 rounded object-cover flex-none"
+          />
+          <div className="flex-1 min-w-0">
+            <h4 className="font-medium text-sm truncate">{activity.title}</h4>
+            <p className="text-xs text-white/90 truncate">
+              <Clock className="inline h-3 w-3 mr-1" />
+              {activity.duration}h
+            </p>
+            {activity.description && (
+              <p className="text-xs text-white/75 line-clamp-2 mt-1">
+                {activity.description}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <Button
+          variant="ghost"
+          className="absolute bottom-0 left-0 right-0 h-8 rounded-none bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/40 text-xs font-medium"
+          onClick={onShowDetails}
+        >
+          <Info className="h-3 w-3 mr-1.5" />
+          Show Details
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 interface CalendarCellProps {
   day: Date
   hour: number
@@ -150,8 +221,8 @@ function CalendarCell({
   const [showDetailsForActivity, setShowDetailsForActivity] = useState<string | null>(null)
   const [{ isOver, canDrop }, drop] = useDrop(
     () => ({
-      accept: "ACTIVITY",
-      canDrop: (item: Activity) => {
+      accept: ["ACTIVITY", "CALENDAR_ACTIVITY"],
+      canDrop: (item: Activity & { source?: string }) => {
         // Create the start time for the new activity
         const newActivityStart = new Date(day)
         newActivityStart.setHours(hour, 0, 0, 0)
@@ -166,21 +237,18 @@ function CalendarCell({
         // Check for overlaps with existing activities
         const hasOverlap = (plan.activities || []).some(existingActivity => {
           if (!existingActivity.startTime) return false
+          // Skip checking overlap with itself when moving
+          if (item.source === 'calendar' && existingActivity.id === item.id) return false
 
           const existingStart = new Date(existingActivity.startTime)
           const existingEnd = addHours(existingStart, existingActivity.duration)
 
-          // Check if the new activity overlaps with this existing activity
           return (
             isSameDay(existingStart, newActivityStart) &&
             (
-              // New activity starts during existing activity
               (isAfter(newActivityStart, existingStart) && isBefore(newActivityStart, existingEnd)) ||
-              // New activity ends during existing activity
               (isAfter(newActivityEnd, existingStart) && isBefore(newActivityEnd, existingEnd)) ||
-              // New activity completely contains existing activity
               (isBefore(newActivityStart, existingStart) && isAfter(newActivityEnd, existingEnd)) ||
-              // New activity starts exactly at the same time
               isEqual(newActivityStart, existingStart)
             )
           )
@@ -188,7 +256,7 @@ function CalendarCell({
 
         return !hasOverlap
       },
-      drop: (item: Activity) => {
+      drop: async (item: Activity & { source?: string }) => {
         const start = new Date(day)
         start.setHours(hour)
         start.setMinutes(0)
@@ -204,48 +272,34 @@ function CalendarCell({
           return
         }
 
-        // Check overlaps again here to show error message
-        const newActivityStart = new Date(day)
-        newActivityStart.setHours(hour, 0, 0, 0)
-        const newActivityEnd = addHours(newActivityStart, item.duration)
+        try {
+          // For move operations, we'll update the activity's start time
+          if (item.source === 'calendar') {
+            // Remove the activity from its current position
+            onRemoveActivity(item.id)
+            // Add it to the new position in the same operation
+            onAddActivity({ ...item, startTime: start }, start)
+          } else {
+            // For new activities, just add them
+            onAddActivity(item, start)
+          }
 
-        const hasOverlap = (plan.activities || []).some(existingActivity => {
-          if (!existingActivity.startTime) return false
-
-          const existingStart = new Date(existingActivity.startTime)
-          const existingEnd = addHours(existingStart, existingActivity.duration)
-
-          return (
-            isSameDay(existingStart, newActivityStart) &&
-            (
-              (isAfter(newActivityStart, existingStart) && isBefore(newActivityStart, existingEnd)) ||
-              (isAfter(newActivityEnd, existingStart) && isBefore(newActivityEnd, existingEnd)) ||
-              (isBefore(newActivityStart, existingStart) && isAfter(newActivityEnd, existingEnd)) ||
-              isEqual(newActivityStart, existingStart)
-            )
-          )
-        })
-
-        if (hasOverlap) {
-          toast.error("Activity Overlap", {
-            description: "This time slot overlaps with an existing activity",
+          toast.success("Activity Added", {
+            description: `${item.title} has been ${item.source === 'calendar' ? 'moved to' : 'added to'} ${format(start, "MMMM do")} at ${format(start, "h:mm a")}.`,
+            duration: 3000,
           })
-          return
+        } catch (error) {
+          toast.error("Failed to move activity", {
+            description: "There was an error moving the activity. Please try again.",
+          })
         }
-
-        onAddActivity(item, start)
-
-        toast.success("Activity Added", {
-          description: `${item.title} has been added to your itinerary on ${format(start, "MMMM do")} at ${format(start, "h:mm a")}.`,
-          duration: 3000,
-        })
       },
       collect: (monitor) => ({
         isOver: !!monitor.isOver(),
         canDrop: !!monitor.canDrop(),
       }),
     }),
-    [day, hour, onAddActivity, plan.activities]
+    [day, hour, onAddActivity, onRemoveActivity, plan.activities]
   )
 
   const cellActivities = (plan.activities || []).filter(activity => {
@@ -281,56 +335,14 @@ function CalendarCell({
           const backgroundColor = activityColors.get(activity.id)
 
           return (
-            <div
+            <DraggableActivity
               key={activity.id}
-              className="group absolute inset-x-1 rounded-md overflow-hidden"
-              style={{
-                top: 0,
-                height: `${heightInCells * 64}px`,
-                zIndex: 10,
-                backgroundColor
-              }}
-            >
-              <div className="relative h-full p-2 text-white">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-1 top-1 h-6 w-6 rounded-full p-0 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/20"
-                  onClick={() => onRemoveActivity(activity.id)}
-                >
-                  <X className="h-3 w-3" />
-                </Button>
-
-                <div className="flex items-start gap-2">
-                  <img
-                    src={activity.image || "/placeholder.svg"}
-                    alt={activity.title}
-                    className="h-12 w-12 rounded object-cover flex-none"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-medium text-sm truncate">{activity.title}</h4>
-                    <p className="text-xs text-white/90 truncate">
-                      <Clock className="inline h-3 w-3 mr-1" />
-                      {activity.duration}h
-                    </p>
-                    {activity.description && (
-                      <p className="text-xs text-white/75 line-clamp-2 mt-1">
-                        {activity.description}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <Button
-                  variant="ghost"
-                  className="absolute bottom-0 left-0 right-0 h-8 rounded-none bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/40 text-xs font-medium"
-                  onClick={() => setShowDetailsForActivity(activity.id)}
-                >
-                  <Info className="h-3 w-3 mr-1.5" />
-                  Show Details
-                </Button>
-              </div>
-            </div>
+              activity={activity}
+              heightInCells={heightInCells}
+              backgroundColor={backgroundColor || ''}
+              onRemove={() => onRemoveActivity(activity.id)}
+              onShowDetails={() => setShowDetailsForActivity(activity.id)}
+            />
           )
         })}
       </div>
