@@ -70,14 +70,22 @@ export default function HomePage() {
   }
 
   const handleChatNow = () => {
+    console.log("Chat Now clicked - Opening AI chat");
     setIsAIChatOpen(true);
+    console.log("isAIChatOpen set to true, preparing to navigate");
     router.push("/planner?chat=ai");
   };
 
   useEffect(() => {
+    console.log("Search params changed:", {
+      params: Object.fromEntries(searchParams.entries()),
+      isAIChatOpen
+    });
     if (searchParams.get("chat") === "ai") {
+      console.log("Setting AI chat open from URL param");
       setIsAIChatOpen(true);
     } else {
+      console.log("Setting AI chat closed from URL param");
       setIsAIChatOpen(false);
     }
   }, [searchParams]);
@@ -245,9 +253,31 @@ export default function HomePage() {
 
       <AIAssistantChat
         isOpen={isAIChatOpen}
-        onClose={() => setIsAIChatOpen(false)}
-        onCreateGroup={(groupName, activities, events) => {
-          router.push("/planner?chat=ai");
+        onClose={() => {
+          console.log("AI chat closing");
+          setIsAIChatOpen(false);
+        }}
+        onCreateGroup={async (groupName, activities, events) => {
+          console.log("Creating group from AI chat:", { groupName, activities, events });
+          if (!user) {
+            console.log("No user found, cannot create group");
+            toast.error("Please sign in to create a group");
+            return;
+          }
+
+          try {
+            console.log("Attempting to create group with name:", groupName);
+            const groupId = await groupsApi.createGroup(groupName, user.uid, user.displayName || "Anonymous");
+            console.log("Group created successfully:", groupId);
+            toast.success("Group created successfully!");
+            // Navigate to planner with the new group
+            console.log("Navigating to planner with group:", groupId);
+            router.push(`/planner?group=${groupId}`);
+          } catch (error) {
+            console.error("Error creating group:", error);
+            toast.error("Failed to create group");
+            setIsAIChatOpen(false);
+          }
         }}
       />
     </div>

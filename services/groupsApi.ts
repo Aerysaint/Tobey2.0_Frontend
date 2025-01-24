@@ -58,7 +58,16 @@ export const groupsApi = {
         }
       },
       createdBy: userId,
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      plan: {
+        id: groupId,
+        title: name,
+        budget: 0,
+        spent: 0,
+        activityIds: [],
+        activities: [],
+        participants: []
+      }
     }
 
     await set(groupRef, group)
