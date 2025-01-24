@@ -4,16 +4,19 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
-import { groupsApi, type Group } from "@/services/groupsApi"
+import { groupsApi } from "@/services/groupsApi"
+import type { Group } from "@/types"
 import { useAuth } from "@/app/contexts/auth-context"
 import { toast } from "sonner"
-import { Loader2 } from "lucide-react"
+import { Loader2, LogOut } from "lucide-react"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 export function RecentGroups() {
   const router = useRouter()
   const { user } = useAuth()
   const [groups, setGroups] = useState<Group[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [leavingGroup, setLeavingGroup] = useState<string | null>(null)
 
   useEffect(() => {
     if (!user) return
@@ -33,6 +36,24 @@ export function RecentGroups() {
     loadGroups()
   }, [user])
 
+  const handleLeaveGroup = async (e: React.MouseEvent, groupId: string) => {
+    e.stopPropagation() // Prevent navigation when clicking leave button
+
+    if (!user || leavingGroup) return
+
+    setLeavingGroup(groupId)
+    try {
+      await groupsApi.leaveGroup(groupId, user.uid)
+      setGroups(groups => groups.filter(g => g.id !== groupId))
+      toast.success("Left group successfully")
+    } catch (error) {
+      console.error("Error leaving group:", error)
+      toast.error("Failed to leave group")
+    } finally {
+      setLeavingGroup(null)
+    }
+  }
+
   if (isLoading) {
     return (
       <Card className="w-64">
@@ -51,25 +72,44 @@ export function RecentGroups() {
       <CardHeader>
         <CardTitle className="text-lg">Your Groups</CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="space-y-2">
-          {groups.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No groups yet. Join one or create a new group.</p>
-          ) : (
-            groups.map((group) => (
-              <div
-                key={group.id}
-                onClick={() => router.push(`/planner?group=${group.id}`)}
-                className="p-3 rounded-lg hover:bg-accent cursor-pointer transition-colors"
-              >
-                <h4 className="font-medium">{group.name}</h4>
-                <p className="text-sm text-muted-foreground">
-                  {Object.keys(group.members).length} member{Object.keys(group.members).length !== 1 ? "s" : ""}
-                </p>
-              </div>
-            ))
-          )}
-        </div>
+      <CardContent className="p-0">
+        <ScrollArea className="h-[400px]">
+          <div className="p-4 space-y-2">
+            {groups.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No groups yet. Join one or create a new group.</p>
+            ) : (
+              groups.map((group) => (
+                <div
+                  key={group.id}
+                  onClick={() => router.push(`/planner?group=${group.id}`)}
+                  className="p-3 rounded-lg hover:bg-accent cursor-pointer transition-colors relative group"
+                >
+                  <div className="flex justify-between items-start gap-2">
+                    <div>
+                      <h4 className="font-medium">{group.name}</h4>
+                      <p className="text-sm text-muted-foreground">
+                        {Object.keys(group.members).length} member{Object.keys(group.members).length !== 1 ? "s" : ""}
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={(e) => handleLeaveGroup(e, group.id)}
+                      disabled={leavingGroup === group.id}
+                    >
+                      {leavingGroup === group.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <LogOut className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </ScrollArea>
       </CardContent>
     </Card>
   )

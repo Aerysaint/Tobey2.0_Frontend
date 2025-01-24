@@ -43,7 +43,7 @@ export interface UserData {
 export interface Group {
   id: string
   name: string
-  plan?: any
+  plan: Plan
   members: { [uid: string]: { joinedAt: number; displayName: string } }
   createdBy: string
   createdAt: number
