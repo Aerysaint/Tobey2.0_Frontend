@@ -4,55 +4,93 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
-import { groupsApi } from "@/services/groupsApi"
-import type { Group } from "@/types"
 import { useAuth } from "@/app/contexts/auth-context"
 import { toast } from "sonner"
 import { Loader2, LogOut } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import axios from "axios"
+
+interface GroupData {
+  id: string
+  name: string
+  memberCount: number
+}
 
 export function RecentGroups() {
   const router = useRouter()
   const { user } = useAuth()
-  const [groups, setGroups] = useState<Group[]>([])
+  const [groups, setGroups] = useState<GroupData[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [leavingGroup, setLeavingGroup] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (!user) return
+  const fetchGroups = async () => {
+    try {
+      // Get list of group IDs
+      const response = await axios.get("http://localhost:8000/getGroups", {
+        withCredentials: true
+      });
 
-    const loadGroups = async () => {
-      try {
-        const userGroups = await groupsApi.getUserGroups(user.uid)
-        setGroups(userGroups)
-      } catch (error) {
-        console.error("Error loading groups:", error)
-        toast.error("Failed to load groups")
-      } finally {
-        setIsLoading(false)
-      }
+      const groupIds = response.data;
+
+      // Fetch details for each group
+      const groupsData = await Promise.all(
+        groupIds.map(async (groupId: string) => {
+          // Get group name
+          const nameResponse = await axios.get(
+            `http://localhost:8000/getGroupName?groupId=${groupId}`,
+            { withCredentials: true }
+          );
+
+          // Get member count
+          const memberCountResponse = await axios.get(
+            `http://localhost:8000/getGroupMemberCount?groupId=${groupId}`,
+            { withCredentials: true }
+          );
+
+          return {
+            id: groupId,
+            name: nameResponse.data.name,
+            memberCount: memberCountResponse.data.count
+          };
+        })
+      );
+
+      setGroups(groupsData);
+    } catch (error) {
+      console.error("Error loading groups:", error);
+      toast.error("Failed to load groups");
+    } finally {
+      setIsLoading(false);
     }
+  };
 
-    loadGroups()
-  }, [user])
+  useEffect(() => {
+    if (!user) return;
+    fetchGroups();
+  }, [user]);
 
   const handleLeaveGroup = async (e: React.MouseEvent, groupId: string) => {
     e.stopPropagation() // Prevent navigation when clicking leave button
 
-    if (!user || leavingGroup) return
+    if (!user || leavingGroup) return;
 
-    setLeavingGroup(groupId)
+    setLeavingGroup(groupId);
     try {
-      await groupsApi.leaveGroup(groupId, user.uid)
-      setGroups(groups => groups.filter(g => g.id !== groupId))
-      toast.success("Left group successfully")
+      // Leave the group
+      await axios.get(`http://localhost:8000/leaveGroup?groupId=${groupId}`, {
+        withCredentials: true
+      });
+
+      // Refresh the groups list
+      await fetchGroups();
+      toast.success("Left group successfully");
     } catch (error) {
-      console.error("Error leaving group:", error)
-      toast.error("Failed to leave group")
+      console.error("Error leaving group:", error);
+      toast.error("Failed to leave group");
     } finally {
-      setLeavingGroup(null)
+      setLeavingGroup(null);
     }
-  }
+  };
 
   if (isLoading) {
     return (
@@ -64,7 +102,7 @@ export function RecentGroups() {
           <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
         </CardContent>
       </Card>
-    )
+    );
   }
 
   return (
@@ -76,7 +114,9 @@ export function RecentGroups() {
         <ScrollArea className="h-[400px]">
           <div className="p-4 space-y-2">
             {groups.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No groups yet. Join one or create a new group.</p>
+              <p className="text-sm text-muted-foreground">
+                No groups yet. Join one or create a new group.
+              </p>
             ) : (
               groups.map((group) => (
                 <div
@@ -88,7 +128,7 @@ export function RecentGroups() {
                     <div>
                       <h4 className="font-medium">{group.name}</h4>
                       <p className="text-sm text-muted-foreground">
-                        {Object.keys(group.members).length} member{Object.keys(group.members).length !== 1 ? "s" : ""}
+                        {group.memberCount} member{group.memberCount !== 1 ? "s" : ""}
                       </p>
                     </div>
                     <Button
@@ -112,5 +152,5 @@ export function RecentGroups() {
         </ScrollArea>
       </CardContent>
     </Card>
-  )
+  );
 } 

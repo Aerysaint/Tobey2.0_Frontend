@@ -1,0 +1,241 @@
+"use client";
+
+import { useState, useRef, useEffect } from "react";
+import { Bot, Send, ArrowLeft } from "lucide-react";
+import { Avatar } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import type { ChatMessage } from "@/types";
+import { TypingAnimation } from "@/app/components/typing-animation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useAuth } from "@/app/contexts/auth-context";
+import { toast } from "sonner";
+import axios from "axios";
+import { db } from "@/lib/firebase";
+import { collection, doc, onSnapshot, orderBy, query } from "firebase/firestore";
+import ReactMarkdown from 'react-markdown';
+
+export default function ChatPage() {
+    const [messages, setMessages] = useState<ChatMessage[]>([]);
+    const [input, setInput] = useState("");
+    const [isTyping, setIsTyping] = useState(false);
+    const [showInput, setShowInput] = useState(true);
+    const scrollAreaRef = useRef<HTMLDivElement>(null);
+    const router = useRouter();
+    const searchParams = useSearchParams();
+    const { user } = useAuth();
+    const groupId = searchParams.get('group');
+
+    // Auto-scroll to the latest message
+    useEffect(() => {
+        if (scrollAreaRef.current) {
+            scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
+        }
+    }, [messages, isTyping]);
+
+    const scrollToBottom = () => {
+        setTimeout(() => {
+            if (scrollAreaRef.current) {
+                const scrollContainer = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
+                if (scrollContainer) {
+                    scrollContainer.scrollTop = scrollContainer.scrollHeight;
+                }
+            }
+        }, 100);
+    };
+
+    // Subscribe to messages from Firestore
+    useEffect(() => {
+        if (!groupId) {
+            toast.error("No group ID provided");
+            router.push('/home');
+            return;
+        }
+
+        const sessionDoc = doc(db, 'sessions', groupId);
+        const messagesCollection = collection(sessionDoc, 'first chat');
+        
+        const unsubscribe = onSnapshot(messagesCollection, (snapshot) => {
+            const newMessages = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    content: data.parts[0].text,
+                    sender: { 
+                        id: data.role === 'model' ? 'ai' : 'user',
+                        name: data.role === 'model' ? 'AI Assistant' : 'You',
+                        role: data.role === 'model' ? 'ai' : 'customer'
+                    }
+                } as ChatMessage;
+            });
+            
+            setMessages(newMessages);
+            setIsTyping(false);
+            scrollToBottom();
+        });
+
+        return () => unsubscribe();
+    }, [groupId, router]);
+
+    // Update typing animation based on last message
+    useEffect(() => {
+        if (messages.length > 0) {
+            const lastMessage = messages[messages.length - 1];
+            setIsTyping(lastMessage.sender.role === 'customer');
+        }
+    }, [messages]);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!input.trim() || !groupId) return;
+
+        const tempMessage: ChatMessage = {
+            id: Date.now().toString(),
+            content: input.trim(),
+            sender: { 
+                id: 'user',
+                name: 'You',
+                role: 'customer'
+            }
+        };
+
+        // Clear input immediately
+        setInput("");
+        
+        // Add message to UI immediately and scroll to bottom
+        setMessages(prev => [...prev, tempMessage]);
+        scrollToBottom();
+
+        try {
+            // Send user message to backend
+            const encodedMessage = encodeURIComponent(input.trim());
+            const response = await axios.get(
+                `http://localhost:8000/addInitialMessage?sessionid=${groupId}&message=${encodedMessage}`,
+                { withCredentials: true }
+            );
+
+            if (response.status !== 200) {
+                throw new Error("Failed to send message");
+            }
+
+            // Trigger AI response
+            const aiResponse = await axios.get(
+                `http://localhost:8000/updateNextInitial?sessionid=${groupId}`,
+                { withCredentials: true }
+            );
+
+            // Check if chat is finished
+            if (aiResponse.data?.status === 'chat finished') {
+                toast.success("Planning completed! Redirecting to planner...");
+                router.push(`/planner?group=${groupId}`);
+                return;
+            }
+        } catch (error) {
+            console.error("Error sending message:", error);
+            // Remove the temporary message if the request failed
+            setMessages(prev => prev.filter(msg => msg.id !== tempMessage.id));
+            toast.error("Failed to send message");
+            setIsTyping(false);
+        }
+    };
+
+    return (
+        <div className="h-screen flex flex-col bg-background">
+            {/* Fixed Header */}
+            <div className="flex items-center justify-between border-b p-4 shrink-0">
+                <div className="flex items-center gap-2">
+                    <Button variant="ghost" size="icon" onClick={() => router.push('/home')}>
+                        <ArrowLeft className="h-4 w-4" />
+                    </Button>
+                    <h2 className="text-lg font-semibold">AI Travel Assistant</h2>
+                </div>
+            </div>
+
+            {/* Scrollable Message Area */}
+            <div className="flex-1 overflow-hidden">
+                <ScrollArea className="h-full p-4" ref={scrollAreaRef}>
+                    <div className="space-y-4">
+                        {messages.map((message) => (
+                            <div
+                                key={message.id}
+                                className={`flex items-start gap-3 ${message.sender.role === "customer" ? "flex-row-reverse" : ""
+                                    }`}
+                            >
+                                <Avatar className="h-8 w-8">
+                                    {message.sender.role === "ai" ? (
+                                        <Bot className="h-5 w-5" />
+                                    ) : (
+                                        <div className="h-full w-full rounded-full bg-primary" />
+                                    )}
+                                </Avatar>
+                                <div
+                                    className={`rounded-lg p-3 ${message.sender.role === "customer"
+                                            ? "bg-primary text-primary-foreground"
+                                            : "bg-muted"
+                                        }`}
+                                >
+                                    {message.sender.role === "ai" ? (
+                                        <ReactMarkdown 
+                                            className="prose prose-sm dark:prose-invert max-w-none"
+                                            components={{
+                                                // Override default element styling
+                                                p: ({children}) => <p className="mb-2 last:mb-0">{children}</p>,
+                                                ul: ({children}) => <ul className="mb-2 list-disc pl-4">{children}</ul>,
+                                                ol: ({children}) => <ol className="mb-2 list-decimal pl-4">{children}</ol>,
+                                                li: ({children}) => <li className="mb-1">{children}</li>,
+                                                h1: ({children}) => <h1 className="text-lg font-bold mb-2">{children}</h1>,
+                                                h2: ({children}) => <h2 className="text-md font-bold mb-2">{children}</h2>,
+                                                h3: ({children}) => <h3 className="text-sm font-bold mb-2">{children}</h3>,
+                                                code: ({children}) => (
+                                                    <code className="bg-muted-foreground/20 rounded px-1 py-0.5">{children}</code>
+                                                ),
+                                                pre: ({children}) => (
+                                                    <pre className="bg-muted-foreground/20 rounded p-2 mb-2 overflow-x-auto">
+                                                        {children}
+                                                    </pre>
+                                                ),
+                                            }}
+                                        >
+                                            {message.content}
+                                        </ReactMarkdown>
+                                    ) : (
+                                        message.content
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                        {isTyping && (
+                            <div className="flex items-center gap-3">
+                                <Avatar className="h-8 w-8">
+                                    <Bot className="h-5 w-5" />
+                                </Avatar>
+                                <TypingAnimation />
+                            </div>
+                        )}
+                    </div>
+                </ScrollArea>
+            </div>
+
+            {/* Fixed Input Area */}
+            {showInput ? (
+                <form onSubmit={handleSubmit} className="border-t p-4 shrink-0">
+                    <div className="flex gap-2">
+                        <Input
+                            placeholder="Type your message..."
+                            value={input}
+                            onChange={(e) => setInput(e.target.value)}
+                        />
+                        <Button type="submit" size="icon">
+                            <Send className="h-4 w-4" />
+                        </Button>
+                    </div>
+                </form>
+            ) : (
+                <div className="border-t p-4 flex justify-center items-center shrink-0">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                </div>
+            )}
+        </div>
+    );
+} 

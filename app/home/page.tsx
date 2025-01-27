@@ -6,7 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
-import { AIAssistantChat } from "../components/ai-assistant-chat";
 import { groupsApi } from "@/services/groupsApi";
 import { toast, Toaster } from "sonner";
 import { RecentGroups } from "../components/recent-groups";
@@ -22,6 +21,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import axios from "axios";
 
 export default function HomePage() {
   const router = useRouter();
@@ -39,41 +39,54 @@ export default function HomePage() {
 
   const handleJoinGroup = async () => {
     if (!groupId.trim() || !user) {
-      toast.error("Please enter a group ID")
-      return
+      toast.error("Please enter a group ID");
+      return;
     }
 
-    setIsLoading(true)
+    setIsLoading(true);
     try {
-      const group = await groupsApi.getGroup(groupId.trim())
-      if (!group) {
-        toast.error("Group not found")
-        return
+      const response = await axios.get(`http://localhost:8000/joinGroup?groupId=${groupId.trim()}`, {
+        withCredentials: true
+      });
+
+      if (response.data.status === "Group does not exist") {
+        toast.error("Group not found");
+        return;
       }
 
-      // Check if user is already a member
-      if (group.members && group.members[user.uid]) {
-        router.push(`/planner?group=${groupId}`)
-        return
-      }
-
-      // Add user to group
-      await groupsApi.joinGroup(groupId.trim(), user.uid, user.displayName || "Anonymous")
-      toast.success("Successfully joined group")
-      router.push(`/planner?group=${groupId}`)
+      toast.success("Successfully joined group");
+      router.push(`/planner?group=${groupId.trim()}`);
     } catch (error) {
-      console.error("Error joining group:", error)
-      toast.error("Failed to join group")
+      console.error("Error joining group:", error);
+      toast.error("Failed to join group");
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
-  const handleChatNow = () => {
-    console.log("Chat Now clicked - Opening AI chat");
-    setIsAIChatOpen(true);
-    console.log("isAIChatOpen set to true, preparing to navigate");
-    router.push("/planner?chat=ai");
+  const handleChatNow = async () => {
+    if (!user) {
+      toast.error("Please sign in to create a group");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await axios.get("http://localhost:8000/createGroup", {
+        withCredentials: true
+      });
+      
+      if (response.status !== 200) {
+        throw new Error("Failed to create group");
+      }
+
+      const { groupId } = response.data;
+      router.push(`/chat?group=${groupId}`);
+    } catch (error) {
+      console.error("Error creating group:", error);
+      toast.error("Failed to start chat session");
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -223,9 +236,18 @@ export default function HomePage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <Button onClick={handleChatNow} className="w-full">
-                  <ArrowRight className="h-4 w-4 mr-2" />
-                  Chat Now
+                <Button onClick={handleChatNow} className="w-full" disabled={isLoading}>
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Creating group...
+                    </>
+                  ) : (
+                    <>
+                      <ArrowRight className="h-4 w-4 mr-2" />
+                      Chat Now
+                    </>
+                  )}
                 </Button>
               </CardContent>
             </Card>
@@ -250,36 +272,6 @@ export default function HomePage() {
           </div>
         </div>
       </main>
-
-      <AIAssistantChat
-        isOpen={isAIChatOpen}
-        onClose={() => {
-          console.log("AI chat closing");
-          setIsAIChatOpen(false);
-        }}
-        onCreateGroup={async (groupName, activities, events) => {
-          console.log("Creating group from AI chat:", { groupName, activities, events });
-          if (!user) {
-            console.log("No user found, cannot create group");
-            toast.error("Please sign in to create a group");
-            return;
-          }
-
-          try {
-            console.log("Attempting to create group with name:", groupName);
-            const groupId = await groupsApi.createGroup(groupName, user.uid, user.displayName || "Anonymous");
-            console.log("Group created successfully:", groupId);
-            toast.success("Group created successfully!");
-            // Navigate to planner with the new group
-            console.log("Navigating to planner with group:", groupId);
-            router.push(`/planner?group=${groupId}`);
-          } catch (error) {
-            console.error("Error creating group:", error);
-            toast.error("Failed to create group");
-            setIsAIChatOpen(false);
-          }
-        }}
-      />
     </div>
   );
 }

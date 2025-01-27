@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState } from "react"
 import { User, onAuthStateChanged } from "firebase/auth"
 import { auth } from "@/lib/firebase"
 import { useRouter } from "next/navigation"
+import axios from 'axios'
 import type { UserData } from "@/types"
 
 export interface AuthContextType {
@@ -28,25 +29,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (user) {
         // First set the user to prevent unnecessary redirects
         setUser(user)
-
-        try {
-          // Create/update user in database through API
-          const userResponse = await fetch("/api/auth/user", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-          })
-
-          if (!userResponse.ok) {
-            const data = await userResponse.json()
-            console.error("Failed to create/update user:", data.error)
-            // Don't sign out here, just log the error
-          }
-        } catch (error) {
-          console.error("Error creating/updating user:", error)
-          // Don't sign out here, just log the error
-        }
       } else {
         setUser(null)
         // Only redirect to login if we're not already there

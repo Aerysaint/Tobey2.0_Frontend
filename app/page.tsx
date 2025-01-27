@@ -8,6 +8,7 @@ import { auth, googleProvider } from "@/lib/firebase"
 import { useAuth } from "@/app/contexts/auth-context"
 import { toast, Toaster } from "sonner"
 import { Loader2 } from "lucide-react"
+import axios from 'axios'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -15,6 +16,7 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
+    console.log("Checking user state")
     if (user) {
       // First attempt normal navigation
       router.replace("/home")
@@ -27,15 +29,19 @@ export default function LoginPage() {
       return () => clearTimeout(timer)
     }
   }, [user, router])
+  console.log("User state checked")
 
   const handleGoogleLogin = async () => {
+    console.log("Handling Google login")
     if (!user) {
       setIsLoading(true)
       try {
         // First try popup
         try {
+          console.log("Attempting popup login")
           const result = await signInWithPopup(auth, googleProvider)
           const idToken = await getIdToken(result.user)
+          console.log("ID token:", idToken)
           await handleLoginSuccess(idToken)
         } catch (popupError) {
           console.log("Popup failed, falling back to redirect:", popupError)
@@ -74,28 +80,59 @@ export default function LoginPage() {
   }, [])
 
   const handleLoginSuccess = async (idToken: string) => {
+    console.log("Handling login success")
     try {
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
+      const response = await axios.post("http://localhost:8000/authenticateUser", {
+        idToken
+      }, {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ idToken }),
+        withCredentials: true
       })
 
-      if (!response.ok) {
+      // Add verbose debugging
+      console.log("Full response:", response)
+      console.log("Response status:", response.status)
+      console.log("Response headers:", response.headers)
+      console.log("Set-Cookie header:", response.headers['set-cookie'])
+      console.log("All cookies before:", document.cookie)
+
+      // Try accessing cookies after a small delay
+      setTimeout(() => {
+        console.log("All cookies after delay:", document.cookie)
+      }, 1000)
+
+      if (response.status !== 200) {
         throw new Error("Failed to create session")
       }
 
-      // Wait for the session data to be processed
-      await new Promise(resolve => setTimeout(resolve, 1000))
-
       // Check if we have a valid session before redirecting
-      const sessionResponse = await fetch("/api/auth/session")
-      const sessionData = await sessionResponse.json()
+      const sessionResponse = await axios.get("http://localhost:8000/authenticateSession", {
+        withCredentials: true
+      })
+      const sessionData = sessionResponse.data
+
+      console.log("Session data:", sessionData)
 
       if (!sessionData.session) {
         throw new Error("Session not established")
+      }
+
+      try {
+        // Create/update user in database through API
+        const response = await axios.get("http://localhost:8000/createUser", {
+          withCredentials: true
+        })
+
+        if (response.status !== 200) {
+          const data = response.data
+          console.error("Failed to create/update user:", data.error)
+          // Don't sign out here, just log the error
+        }
+      } catch (error) {
+        console.error("Error creating/updating user:", error)
+        // Don't sign out here, just log the error
       }
 
       // Use router.replace to prevent back navigation to login
