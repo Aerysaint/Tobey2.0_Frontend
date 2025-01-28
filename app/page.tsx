@@ -8,7 +8,7 @@ import { auth, googleProvider } from "@/lib/firebase"
 import { useAuth } from "@/app/contexts/auth-context"
 import { toast, Toaster } from "sonner"
 import { Loader2 } from "lucide-react"
-import axios from 'axios'
+import api from '@/lib/axios'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -31,120 +31,121 @@ export default function LoginPage() {
   }, [user, router])
   console.log("User state checked")
 
+  const handleLoginSuccess = async (idToken: string) => {
+    console.log("Handling login success");
+    try {
+      const response = await api.post("/authenticateUser", {
+        idToken
+      });
+
+      console.log("Authentication response:", response);
+
+      if (response.status !== 200) {
+        throw new Error("Failed to create session");
+      }
+
+      // Add a longer delay to ensure cookie is set
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Verify session is established
+      let sessionVerified = false;
+      let retryCount = 0;
+      const maxRetries = 3;
+
+      while (!sessionVerified && retryCount < maxRetries) {
+        try {
+          console.log("Verifying session, attempt:", retryCount + 1);
+          const sessionResponse = await api.get("/authenticateSession");
+          
+          if (sessionResponse.data.session) {
+            sessionVerified = true;
+            console.log("Session verified successfully");
+          } else {
+            console.log("Session not verified, retrying...");
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        } catch (error) {
+          console.error("Session verification attempt failed:", error);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        retryCount++;
+      }
+
+      if (!sessionVerified) {
+        throw new Error("Failed to verify session after multiple attempts");
+      }
+
+      // Create/update user only after session is verified
+      try {
+        const userResponse = await api.get("/createUser");
+        if (userResponse.status !== 200) {
+          console.error("Failed to create/update user:", userResponse.data.error);
+        }
+      } catch (error) {
+        console.error("Error creating/updating user:", error);
+      }
+
+      // Final delay before redirect
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Use window.location instead of router for a full page reload
+      window.location.href = "/home";
+    } catch (error) {
+      console.error("Error in authentication flow:", error);
+      toast.error("Failed to create session", {
+        description: error instanceof Error ? error.message : "Please try again",
+      });
+      setIsLoading(false);
+    }
+  };
+
   const handleGoogleLogin = async () => {
-    console.log("Handling Google login")
+    console.log("Handling Google login");
     if (!user) {
-      setIsLoading(true)
+      setIsLoading(true);
       try {
         // First try popup
         try {
-          console.log("Attempting popup login")
-          const result = await signInWithPopup(auth, googleProvider)
-          const idToken = await getIdToken(result.user)
-          console.log("ID token:", idToken)
-          await handleLoginSuccess(idToken)
+          console.log("Attempting popup login");
+          const result = await signInWithPopup(auth, googleProvider);
+          const idToken = await getIdToken(result.user);
+          console.log("ID token:", idToken);
+          await handleLoginSuccess(idToken);
         } catch (popupError) {
-          console.log("Popup failed, falling back to redirect:", popupError)
+          console.log("Popup failed, falling back to redirect:", popupError);
           // If popup fails (blocked), fall back to redirect
-          await signInWithRedirect(auth, googleProvider)
+          await signInWithRedirect(auth, googleProvider);
         }
       } catch (error) {
-        console.error("Error signing in with Google:", error)
+        console.error("Error signing in with Google:", error);
         toast.error("Failed to sign in with Google", {
           description: error instanceof Error ? error.message : "Please try again",
-        })
-        setIsLoading(false)
+        });
+        setIsLoading(false);
       }
     }
-  }
+  };
 
   // Handle redirect result
   useEffect(() => {
     const handleRedirectResult = async () => {
       try {
-        const result = await getRedirectResult(auth)
+        const result = await getRedirectResult(auth);
         if (result) {
-          const idToken = await getIdToken(result.user)
-          await handleLoginSuccess(idToken)
+          const idToken = await getIdToken(result.user);
+          await handleLoginSuccess(idToken);
         }
       } catch (error) {
-        console.error("Error handling redirect result:", error)
+        console.error("Error handling redirect result:", error);
         toast.error("Failed to complete sign in", {
           description: error instanceof Error ? error.message : "Please try again",
-        })
-        setIsLoading(false)
+        });
+        setIsLoading(false);
       }
-    }
+    };
 
-    handleRedirectResult()
-  }, [])
-
-  const handleLoginSuccess = async (idToken: string) => {
-    console.log("Handling login success")
-    try {
-      const response = await axios.post("http://localhost:8000/authenticateUser", {
-        idToken
-      }, {
-        headers: {
-          "Content-Type": "application/json",
-        },
-        withCredentials: true
-      })
-
-      // Add verbose debugging
-      console.log("Full response:", response)
-      console.log("Response status:", response.status)
-      console.log("Response headers:", response.headers)
-      console.log("Set-Cookie header:", response.headers['set-cookie'])
-      console.log("All cookies before:", document.cookie)
-
-      // Try accessing cookies after a small delay
-      setTimeout(() => {
-        console.log("All cookies after delay:", document.cookie)
-      }, 1000)
-
-      if (response.status !== 200) {
-        throw new Error("Failed to create session")
-      }
-
-      // Check if we have a valid session before redirecting
-      const sessionResponse = await axios.get("http://localhost:8000/authenticateSession", {
-        withCredentials: true
-      })
-      const sessionData = sessionResponse.data
-
-      console.log("Session data:", sessionData)
-
-      if (!sessionData.session) {
-        throw new Error("Session not established")
-      }
-
-      try {
-        // Create/update user in database through API
-        const response = await axios.get("http://localhost:8000/createUser", {
-          withCredentials: true
-        })
-
-        if (response.status !== 200) {
-          const data = response.data
-          console.error("Failed to create/update user:", data.error)
-          // Don't sign out here, just log the error
-        }
-      } catch (error) {
-        console.error("Error creating/updating user:", error)
-        // Don't sign out here, just log the error
-      }
-
-      // Use router.replace to prevent back navigation to login
-      await router.replace("/home")
-    } catch (error) {
-      console.error("Error creating session:", error)
-      toast.error("Failed to create session", {
-        description: error instanceof Error ? error.message : "Please try again",
-      })
-      setIsLoading(false)
-    }
-  }
+    handleRedirectResult();
+  }, []);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-white">

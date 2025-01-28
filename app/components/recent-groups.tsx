@@ -8,7 +8,7 @@ import { useAuth } from "@/app/contexts/auth-context"
 import { toast } from "sonner"
 import { Loader2, LogOut } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import axios from "axios"
+import api from '@/lib/axios'
 
 interface GroupData {
   id: string
@@ -26,71 +26,83 @@ export function RecentGroups() {
   const fetchGroups = async () => {
     try {
       // Get list of group IDs
-      const response = await axios.get("http://localhost:8000/getGroups", {
-        withCredentials: true
-      });
-
-      const groupIds = response.data;
+      const response = await api.get("/getGroups")
+      const groupIds = response.data
 
       // Fetch details for each group
       const groupsData = await Promise.all(
         groupIds.map(async (groupId: string) => {
           // Get group name
-          const nameResponse = await axios.get(
-            `http://localhost:8000/getGroupName?groupId=${groupId}`,
-            { withCredentials: true }
-          );
+          const nameResponse = await api.get(
+            `/getGroupName?groupId=${groupId}`
+          )
 
           // Get member count
-          const memberCountResponse = await axios.get(
-            `http://localhost:8000/getGroupMemberCount?groupId=${groupId}`,
-            { withCredentials: true }
-          );
+          const memberCountResponse = await api.get(
+            `/getGroupMemberCount?groupId=${groupId}`
+          )
 
           return {
             id: groupId,
             name: nameResponse.data.name,
             memberCount: memberCountResponse.data.count
-          };
+          }
         })
-      );
+      )
 
-      setGroups(groupsData);
+      setGroups(groupsData)
     } catch (error) {
-      console.error("Error loading groups:", error);
-      toast.error("Failed to load groups");
+      console.error("Error loading groups:", error)
+      toast.error("Failed to load groups")
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
+  }
 
   useEffect(() => {
     if (!user) return;
-    fetchGroups();
+
+    const loadGroups = async () => {
+      setIsLoading(true);
+      try {
+        // Verify session first
+        const sessionResponse = await api.get("/authenticateSession");
+        if (!sessionResponse.data.session) {
+          console.error("No valid session found");
+          toast.error("Session expired. Please reload the page.");
+          return;
+        }
+
+        // Then fetch groups
+        await fetchGroups();
+      } catch (error) {
+        console.error("Error in groups loading flow:", error);
+        toast.error("Failed to load groups");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadGroups();
   }, [user]);
 
   const handleLeaveGroup = async (e: React.MouseEvent, groupId: string) => {
     e.stopPropagation() // Prevent navigation when clicking leave button
 
-    if (!user || leavingGroup) return;
+    if (!user || leavingGroup) return
 
-    setLeavingGroup(groupId);
+    setLeavingGroup(groupId)
     try {
-      // Leave the group
-      await axios.get(`http://localhost:8000/leaveGroup?groupId=${groupId}`, {
-        withCredentials: true
-      });
-
-      // Refresh the groups list
-      await fetchGroups();
-      toast.success("Left group successfully");
+      await api.get(`/leaveGroup?groupId=${groupId}`)
+      await fetchGroups()
+      toast.success("Left group successfully")
     } catch (error) {
-      console.error("Error leaving group:", error);
-      toast.error("Failed to leave group");
+      console.error("Error leaving group:", error)
+      toast.error("Failed to leave group")
     } finally {
-      setLeavingGroup(null);
+      setLeavingGroup(null)
     }
-  };
+  }
 
   if (isLoading) {
     return (
@@ -102,7 +114,7 @@ export function RecentGroups() {
           <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
         </CardContent>
       </Card>
-    );
+    )
   }
 
   return (
@@ -152,5 +164,5 @@ export function RecentGroups() {
         </ScrollArea>
       </CardContent>
     </Card>
-  );
+  )
 } 

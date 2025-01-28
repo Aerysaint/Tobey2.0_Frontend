@@ -18,6 +18,7 @@ import { Group } from "@/types"
 import { GroupChatPanel } from "../components/group-chat-panel"
 import { useAuth } from "@/app/contexts/auth-context"
 import { Loader2 } from "lucide-react"
+import api from '@/lib/axios'
 
 const defaultPlan: Plan = {
   id: "default",
@@ -170,52 +171,56 @@ export default function PlannerPage() {
     }
 
     try {
-      const groupId = await groupsApi.createGroup(groupName, user.uid, user.displayName || "Anonymous")
-      console.log("Group created:", groupId);
-      const group = await groupsApi.getGroup(groupId)
-      if (group) {
-        console.log("Group fetched:", group);
-        setCurrentGroup(group)
-        setGroup(group)
-        setIsAIChatOpen(false)
-        toast.success("Group created successfully!")
-        router.push(`/planner?group=${groupId}`)
-      }
+      const response = await api.post('/createGroup', {
+        name: groupName,
+        userId: user.uid,
+        userName: user.displayName || "Anonymous"
+      });
+
+      const groupId = response.data.groupId;
+      const groupResponse = await api.get(`/getGroupName?groupId=${groupId}`);
+      const memberCountResponse = await api.get(`/getGroupMemberCount?groupId=${groupId}`);
+
+      const group = {
+        id: groupId,
+        name: groupResponse.data.name,
+        memberCount: memberCountResponse.data.count
+      };
+
+      setCurrentGroup(group);
+      setGroup(group);
+      setIsAIChatOpen(false);
+      toast.success("Group created successfully!");
+      router.push(`/planner?group=${groupId}`);
     } catch (error) {
-      console.error("Error creating group:", error)
-      toast.error("Failed to create group. Please try again.")
-      router.push("/home")
+      console.error("Error creating group:", error);
+      toast.error("Failed to create group. Please try again.");
+      router.push("/home");
     }
-  }, [user, router])
+  }, [user, router]);
 
   const handleUpdateBudget = useCallback(
     async (amount: number) => {
       if (!currentGroup) {
-        dispatch({ type: "UPDATE_BUDGET", amount })
-        return
-      }
-
-      const updatedGroup = {
-        ...currentGroup,
-        plan: {
-          ...currentGroup.plan,
-          budget: amount,
-        },
+        dispatch({ type: "UPDATE_BUDGET", amount });
+        return;
       }
 
       try {
-        await groupsApi.updateGroup(updatedGroup)
-        setCurrentGroup(updatedGroup)
+        await api.post(`/updateBudget?groupId=${currentGroup.id}`, {
+          budget: amount
+        });
+        
         toast.success("Budget Updated", {
           description: `Budget has been set to ₹${amount}`,
-        })
+        });
       } catch (error) {
-        console.error("Error updating budget:", error)
-        toast.error("Failed to update budget")
+        console.error("Error updating budget:", error);
+        toast.error("Failed to update budget");
       }
     },
-    [currentGroup, dispatch],
-  )
+    [currentGroup, dispatch]
+  );
 
   const handleToggleChat = useCallback(() => {
     setIsChatOpen((prev) => !prev)

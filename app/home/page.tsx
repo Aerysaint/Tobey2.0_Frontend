@@ -21,7 +21,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import axios from "axios";
+import api from '@/lib/axios';
 
 export default function HomePage() {
   const router = useRouter();
@@ -45,9 +45,7 @@ export default function HomePage() {
 
     setIsLoading(true);
     try {
-      const response = await axios.get(`http://localhost:8000/joinGroup?groupId=${groupId.trim()}`, {
-        withCredentials: true
-      });
+      const response = await api.get(`/joinGroup?groupId=${groupId.trim()}`);
 
       if (response.data.status === "Group does not exist") {
         toast.error("Group not found");
@@ -72,9 +70,7 @@ export default function HomePage() {
 
     setIsLoading(true);
     try {
-      const response = await axios.get("http://localhost:8000/createGroup", {
-        withCredentials: true
-      });
+      const response = await api.get("/createGroup");
       
       if (response.status !== 200) {
         throw new Error("Failed to create group");

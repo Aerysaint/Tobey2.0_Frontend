@@ -11,7 +11,7 @@ import { TypingAnimation } from "@/app/components/typing-animation";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/app/contexts/auth-context";
 import { toast } from "sonner";
-import axios from "axios";
+import api from '@/lib/axios';
 import { db } from "@/lib/firebase";
 import { collection, doc, onSnapshot, orderBy, query } from "firebase/firestore";
 import ReactMarkdown from 'react-markdown';
@@ -100,19 +100,14 @@ export default function ChatPage() {
             }
         };
 
-        // Clear input immediately
         setInput("");
-        
-        // Add message to UI immediately and scroll to bottom
         setMessages(prev => [...prev, tempMessage]);
         scrollToBottom();
 
         try {
-            // Send user message to backend
             const encodedMessage = encodeURIComponent(input.trim());
-            const response = await axios.get(
-                `http://localhost:8000/addInitialMessage?sessionid=${groupId}&message=${encodedMessage}`,
-                { withCredentials: true }
+            const response = await api.get(
+                `/addInitialMessage?sessionid=${groupId}&message=${encodedMessage}`
             );
 
             if (response.status !== 200) {
@@ -120,9 +115,8 @@ export default function ChatPage() {
             }
 
             // Trigger AI response
-            const aiResponse = await axios.get(
-                `http://localhost:8000/updateNextInitial?sessionid=${groupId}`,
-                { withCredentials: true }
+            const aiResponse = await api.get(
+                `/updateNextInitial?sessionid=${groupId}`
             );
 
             // Check if chat is finished
@@ -133,7 +127,6 @@ export default function ChatPage() {
             }
         } catch (error) {
             console.error("Error sending message:", error);
-            // Remove the temporary message if the request failed
             setMessages(prev => prev.filter(msg => msg.id !== tempMessage.id));
             toast.error("Failed to send message");
             setIsTyping(false);
