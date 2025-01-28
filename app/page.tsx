@@ -15,38 +15,40 @@ export default function LoginPage() {
   const { user } = useAuth()
   const [isLoading, setIsLoading] = useState(false)
 
+  // Check session status on mount
   useEffect(() => {
-    console.log("Checking user state")
-    if (user) {
-      // First attempt normal navigation
-      router.replace("/home")
-
-      // Set up a delayed reload as fallback
-      const timer = setTimeout(() => {
-        window.location.reload()
-      }, 4000)
-
-      return () => clearTimeout(timer)
+    const checkSession = async () => {
+      try {
+        const response = await api.get("/authenticateSession")
+        if (response.data.session) {
+          console.log("Valid session found, redirecting to home")
+          router.replace("/home")
+        } else {
+          console.log("No valid session found, showing login page")
+          setIsLoading(false)
+        }
+      } catch (error) {
+        console.error("Error checking session:", error)
+        setIsLoading(false)
+      }
     }
-  }, [user, router])
-  console.log("User state checked")
+
+    checkSession()
+  }, [router])
 
   const handleLoginSuccess = async (idToken: string) => {
     console.log("Handling login success");
     try {
       const response = await api.post("/authenticateUser", {
         idToken
-      });
-
-      console.log("Authentication response:", response);
+      })
 
       if (response.status !== 200) {
-        throw new Error("Failed to create session");
+        throw new Error("Failed to create session")
       }
 
-      // Add a longer delay to ensure cookie is set
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
+      await new Promise(resolve => setTimeout(resolve, 2000))
+      
       // Verify session is established
       let sessionVerified = false;
       let retryCount = 0;
@@ -100,29 +102,22 @@ export default function LoginPage() {
   };
 
   const handleGoogleLogin = async () => {
-    console.log("Handling Google login");
-    if (!user) {
-      setIsLoading(true);
+    setIsLoading(true);
+    try {
+      // First try popup
       try {
-        // First try popup
-        try {
-          console.log("Attempting popup login");
-          const result = await signInWithPopup(auth, googleProvider);
-          const idToken = await getIdToken(result.user);
-          console.log("ID token:", idToken);
-          await handleLoginSuccess(idToken);
-        } catch (popupError) {
-          console.log("Popup failed, falling back to redirect:", popupError);
-          // If popup fails (blocked), fall back to redirect
-          await signInWithRedirect(auth, googleProvider);
-        }
-      } catch (error) {
-        console.error("Error signing in with Google:", error);
-        toast.error("Failed to sign in with Google", {
-          description: error instanceof Error ? error.message : "Please try again",
-        });
-        setIsLoading(false);
+        const result = await signInWithPopup(auth, googleProvider);
+        const idToken = await getIdToken(result.user);
+        await handleLoginSuccess(idToken);
+      } catch (popupError) {
+        console.log("Popup failed, falling back to redirect:", popupError);
+        // If popup fails (blocked), fall back to redirect
+        await signInWithRedirect(auth, googleProvider);
       }
+    } catch (error) {
+      console.error("Error signing in with Google:", error);
+      toast.error("Failed to sign in with Google");
+      setIsLoading(false);
     }
   };
 
@@ -137,9 +132,7 @@ export default function LoginPage() {
         }
       } catch (error) {
         console.error("Error handling redirect result:", error);
-        toast.error("Failed to complete sign in", {
-          description: error instanceof Error ? error.message : "Please try again",
-        });
+        toast.error("Failed to complete sign in");
         setIsLoading(false);
       }
     };

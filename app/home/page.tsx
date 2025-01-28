@@ -63,11 +63,6 @@ export default function HomePage() {
   };
 
   const handleChatNow = async () => {
-    if (!user) {
-      toast.error("Please sign in to create a group");
-      return;
-    }
-
     setIsLoading(true);
     try {
       const response = await api.get("/createGroup");
@@ -76,7 +71,11 @@ export default function HomePage() {
         throw new Error("Failed to create group");
       }
 
-      const { groupId } = response.data;
+      const groupId = response.data.groupId;
+      if (!groupId) {
+        throw new Error("No group ID received");
+      }
+
       router.push(`/chat?group=${groupId}`);
     } catch (error) {
       console.error("Error creating group:", error);
@@ -104,28 +103,14 @@ export default function HomePage() {
     setIsLoading(true);
 
     try {
-      // First, sign out from Firebase Auth
+      // Sign out from backend first
+      await api.get('/signOut');
+      
+      // Then sign out from Firebase
       await signOut(auth);
-
-      // Then clear the session cookie
-      const response = await fetch("/api/auth/signout", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to sign out");
-      }
-
-      // First attempt normal navigation
-      router.replace("/");
-
-      // Set up a delayed reload as fallback
-      setTimeout(() => {
-        window.location.reload();
-      }, 4000);
+      
+      // Redirect to login page
+      router.push('/');
     } catch (error) {
       console.error("Error signing out:", error);
       toast.error("Failed to sign out", {
