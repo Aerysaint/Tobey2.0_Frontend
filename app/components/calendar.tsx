@@ -6,33 +6,117 @@ import type { Activity, Plan } from "@/types"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { X, ChevronLeft, ChevronRight, CalendarIcon, Clock, Info } from "lucide-react"
-import { useState, useRef } from "react"
+import { X, ChevronLeft, ChevronRight, CalendarIcon, Clock, Info, MapPin } from "lucide-react"
+import { useState, useRef, useEffect } from "react"
 import { Calendar as CalendarPicker } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ActivityDetailsPanel } from "./activity-details-panel"
+import { collection, onSnapshot, query } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import api from '@/lib/axios';
+import { format as formatDate, addMinutes } from "date-fns";
 
 interface CalendarProps {
   plan: Plan
-  onAddActivity: (activity: Activity, startTime: Date) => void
-  onRemoveActivity: (activityId: string) => void
+  groupId: string
 }
 
-export function Calendar({ plan, onAddActivity, onRemoveActivity }: CalendarProps) {
+export function Calendar({ plan, groupId }: CalendarProps) {
   const [startDate, setStartDate] = useState(startOfWeek(new Date()))
+  const [activities, setActivities] = useState<Activity[]>([])
   const days = Array.from({ length: 7 }, (_, i) => addDays(startDate, i))
   const hours = Array.from({ length: 24 }, (_, i) => i)
+  const quarterHours = [0, 15, 30, 45] // 15-minute intervals
   const colorMapRef = useRef(new Map<string, string>())
 
-    // Update color map with new activities only
-    ; (plan.activities || []).forEach(activity => {
+  // Subscribe to Firestore changes
+  useEffect(() => {
+    if (!groupId) return;
+
+    const itineraryRef = collection(db, 'sessions', groupId, 'itinerary');
+    const unsubscribe = onSnapshot(query(itineraryRef), (snapshot) => {
+      const updatedActivities: Activity[] = [];
+      
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        updatedActivities.push({
+          id: data.id, // Original activity ID
+          itineraryId: doc.id, // Firestore document ID
+          name: data.Name,
+          cityName: data.CityName,
+          price: data.Price,
+          currency: data.Currency,
+          imageList: data.ImageList || [],
+          fromDate: data.FromDate,
+          toDate: data.ToDate
+        });
+      });
+
+      setActivities(updatedActivities);
+    });
+
+    return () => unsubscribe();
+  }, [groupId]);
+
+  // Update color map
+  useEffect(() => {
+    activities.forEach(activity => {
       if (!colorMapRef.current.has(activity.id)) {
-        const hue = Math.floor(Math.random() * 360)
-        const saturation = Math.floor(Math.random() * 20 + 60)
-        const lightness = Math.floor(Math.random() * 15 + 20)
-        colorMapRef.current.set(activity.id, `hsl(${hue}, ${saturation}%, ${lightness}%)`)
+        const hue = Math.floor(Math.random() * 360);
+        const saturation = Math.floor(Math.random() * 20 + 60);
+        const lightness = Math.floor(Math.random() * 15 + 20);
+        colorMapRef.current.set(activity.id, `hsl(${hue}, ${saturation}%, ${lightness}%)`);
       }
-    })
+    });
+  }, [activities]);
+
+  const handleAddActivity = async (activity: Activity, startTime: Date) => {
+    try {
+      const fromDate = formatDate(startTime, "yyyy-MM-dd'T'HH:mm:ss");
+      const toDate = formatDate(addMinutes(startTime, 30), "yyyy-MM-dd'T'HH:mm:ss");
+
+      console.log(groupId);
+
+      await api.get('/addActivityToItinerary', {
+        params: {
+          groupid: groupId,
+          activityid: activity.id,
+          fromdate: fromDate,
+          todate: toDate
+        }
+      });
+
+      toast.success("Activity added to calendar");
+    } catch (error) {
+      console.error("Error adding activity:", error);
+      toast.error("Failed to add activity to calendar");
+    }
+  };
+
+  const handleRemoveActivity = async (activityId: string) => {
+    try {
+      console.log("activities", activities);
+      console.log("activityId", activityId);
+      const activity = activities.find(a => a.itineraryId === activityId);
+      if (!activity) {
+        throw new Error("Activity not found");
+      }
+
+      console.log("groupId", groupId);
+      console.log("activityId", activity.itineraryId);
+      await api.get('/removeActivityFromItinerary', {
+        params: {
+          groupid: groupId,
+          activityid: activity.itineraryId
+        }
+      });
+
+      toast.success("Activity removed from calendar");
+    } catch (error) {
+      console.error("Error removing activity:", error);
+      toast.error("Failed to remove activity from calendar");
+    }
+  };
 
   const getDayBudget = (day: Date) => {
     return (plan.activities || []).reduce((total, activity) => {
@@ -98,29 +182,38 @@ export function Calendar({ plan, onAddActivity, onRemoveActivity }: CalendarProp
         {/* Scrollable Content */}
         <ScrollArea className="h-full">
           <div className="grid grid-cols-[auto_repeat(7,1fr)] gap-4">
-            {/* Time labels */}
+            {/* Time labels - now showing quarter hours */}
             <div className="sticky left-0 z-40 bg-background">
-              {hours.map((hour) => (
-                <div key={hour} className="h-16 pr-2 text-right text-sm text-muted-foreground">
-                  {hour % 12 || 12} {hour < 12 ? "AM" : "PM"}
-                </div>
-              ))}
+              {hours.map((hour) =>
+                quarterHours.map((minute) => (
+                  <div
+                    key={`${hour}:${minute}`}
+                    className="h-4 pr-2 text-right text-sm text-muted-foreground"
+                  >
+                    {minute === 0 && `${hour % 12 || 12} ${hour < 12 ? "AM" : "PM"}`}
+                  </div>
+                ))
+              )}
             </div>
 
             {/* Calendar grid */}
             {days.map((day) => (
               <div key={day.toISOString()}>
-                {hours.map((hour) => (
-                  <CalendarCell
-                    key={`${day.toISOString()}-${hour}`}
-                    day={day}
-                    hour={hour}
-                    plan={plan}
-                    onAddActivity={onAddActivity}
-                    onRemoveActivity={onRemoveActivity}
-                    activityColors={colorMapRef.current}
-                  />
-                ))}
+                {hours.map((hour) =>
+                  quarterHours.map((minute) => (
+                    <CalendarCell
+                      key={`${day.toISOString()}-${hour}-${minute}`}
+                      day={day}
+                      hour={hour}
+                      minute={minute}
+                      activities={activities}
+                      onAddActivity={handleAddActivity}
+                      onRemoveActivity={handleRemoveActivity}
+                      activityColors={colorMapRef.current}
+                      groupId={groupId}
+                    />
+                  ))
+                )}
               </div>
             ))}
           </div>
@@ -132,13 +225,12 @@ export function Calendar({ plan, onAddActivity, onRemoveActivity }: CalendarProp
 
 interface DraggableActivityProps {
   activity: Activity
-  heightInCells: number
   backgroundColor: string
   onRemove: () => void
   onShowDetails: () => void
 }
 
-function DraggableActivity({ activity, heightInCells, backgroundColor, onRemove, onShowDetails }: DraggableActivityProps) {
+function DraggableActivity({ activity, backgroundColor, onRemove, onShowDetails }: DraggableActivityProps) {
   const [{ isDragging }, drag] = useDrag(() => ({
     type: "CALENDAR_ACTIVITY",
     item: { ...activity, source: 'calendar' },
@@ -147,13 +239,24 @@ function DraggableActivity({ activity, heightInCells, backgroundColor, onRemove,
     }),
   }), [activity])
 
+  // Calculate height based on duration (fromDate to toDate)
+  const getDurationHeight = () => {
+    if (!activity.fromDate || !activity.toDate) return '16px'; // Default to one 15-min slot
+
+    const start = new Date(activity.fromDate);
+    const end = new Date(activity.toDate);
+    const durationMinutes = (end.getTime() - start.getTime()) / (1000 * 60);
+    // Each 15-min slot is 16px high (h-4 class)
+    return `${(durationMinutes / 15) * 16}px`;
+  };
+
   return (
     <div
       ref={drag as any}
       className={`group absolute inset-x-1 rounded-md overflow-hidden cursor-move ${isDragging ? 'opacity-50' : ''}`}
       style={{
         top: 0,
-        height: `${heightInCells * 64}px`,
+        height: getDurationHeight(),
         zIndex: 10,
         backgroundColor
       }}
@@ -170,21 +273,25 @@ function DraggableActivity({ activity, heightInCells, backgroundColor, onRemove,
 
         <div className="flex items-start gap-2">
           <img
-            src={activity.image || "/placeholder.svg"}
-            alt={activity.title}
+            src={activity.imageList[0] || "/placeholder.svg"}
+            alt={activity.name}
             className="h-12 w-12 rounded object-cover flex-none"
           />
           <div className="flex-1 min-w-0">
-            <h4 className="font-medium text-sm truncate">{activity.title}</h4>
+            <h4 className="font-medium text-sm truncate">{activity.name}</h4>
             <p className="text-xs text-white/90 truncate">
-              <Clock className="inline h-3 w-3 mr-1" />
-              {activity.duration}h
+              <MapPin className="inline h-3 w-3 mr-1" />
+              {activity.cityName}
             </p>
-            {activity.description && (
-              <p className="text-xs text-white/75 line-clamp-2 mt-1">
-                {activity.description}
-              </p>
-            )}
+            <p className="text-xs text-white/75">
+              {activity.currency} {activity.price.toLocaleString()}
+            </p>
+            {/* Add time display */}
+            <p className="text-xs text-white/75 mt-1">
+              <Clock className="inline h-3 w-3 mr-1" />
+              {activity.fromDate && format(new Date(activity.fromDate), "h:mm a")} - 
+              {activity.toDate && format(new Date(activity.toDate), "h:mm a")}
+            </p>
           </div>
         </div>
 
@@ -204,19 +311,23 @@ function DraggableActivity({ activity, heightInCells, backgroundColor, onRemove,
 interface CalendarCellProps {
   day: Date
   hour: number
-  plan: Plan
-  onAddActivity: (activity: Activity, startTime: Date) => void
-  onRemoveActivity: (activityId: string) => void
+  minute: number
+  activities: Activity[]
+  onAddActivity: (activity: Activity, startTime: Date) => Promise<void>
+  onRemoveActivity: (activityId: string) => Promise<void>
   activityColors: Map<string, string>
+  groupId: string
 }
 
 function CalendarCell({
   day,
   hour,
-  plan,
+  minute,
+  activities,
   onAddActivity,
   onRemoveActivity,
   activityColors,
+  groupId,
 }: CalendarCellProps) {
   const [showDetailsForActivity, setShowDetailsForActivity] = useState<string | null>(null)
   const [{ isOver, canDrop }, drop] = useDrop(
@@ -225,23 +336,22 @@ function CalendarCell({
       canDrop: (item: Activity & { source?: string }) => {
         // Create the start time for the new activity
         const newActivityStart = new Date(day)
-        newActivityStart.setHours(hour, 0, 0, 0)
-        const newActivityEnd = addHours(newActivityStart, item.duration)
+        newActivityStart.setHours(hour, minute, 0, 0)
+        const newActivityEnd = addMinutes(newActivityStart, 15)
 
         // Check if activity extends beyond midnight
-        const endHour = hour + item.duration
-        if (endHour > 24) {
+        const totalMinutes = hour * 60 + minute + 15
+        if (totalMinutes > 24 * 60) {
           return false
         }
 
         // Check for overlaps with existing activities
-        const hasOverlap = (plan.activities || []).some(existingActivity => {
-          if (!existingActivity.startTime) return false
-          // Skip checking overlap with itself when moving
+        const hasOverlap = activities.some(existingActivity => {
+          if (!existingActivity.fromDate) return false
           if (item.source === 'calendar' && existingActivity.id === item.id) return false
 
-          const existingStart = new Date(existingActivity.startTime)
-          const existingEnd = addHours(existingStart, existingActivity.duration)
+          const existingStart = new Date(existingActivity.fromDate)
+          const existingEnd = new Date(existingActivity.toDate)
 
           return (
             isSameDay(existingStart, newActivityStart) &&
@@ -258,40 +368,39 @@ function CalendarCell({
       },
       drop: async (item: Activity & { source?: string }) => {
         const start = new Date(day)
-        start.setHours(hour)
-        start.setMinutes(0)
-        start.setSeconds(0)
-        start.setMilliseconds(0)
-
-        // Check duration again here to show error message
-        const endHour = hour + item.duration
-        if (endHour > 24) {
-          toast.error("Activity Duration Error", {
-            description: `This activity is ${item.duration} hours long and would extend beyond the calendar day when started at ${format(start, 'h:mm a')}`,
-          })
-          return
-        }
+        start.setHours(hour, minute, 0, 0)
+        const end = addMinutes(start, 30)
 
         try {
-          // For move operations, we'll update the activity's start time
           if (item.source === 'calendar') {
-            // Remove the activity from its current position
-            onRemoveActivity(item.id)
-            // Add it to the new position in the same operation
-            onAddActivity({ ...item, startTime: start }, start)
+            // Use update endpoint for moves
+            await api.get('/updateActivityInItinerary', {
+              params: {
+                groupid: groupId,
+                activityid: item.itineraryId,
+                fromdate: formatDate(start, "yyyy-MM-dd'T'HH:mm:ss"),
+                todate: formatDate(end, "yyyy-MM-dd'T'HH:mm:ss")
+              }
+            });
           } else {
-            // For new activities, just add them
-            onAddActivity(item, start)
+            // Use add endpoint for new activities
+            await onAddActivity(item, start)
           }
 
-          toast.success("Activity Added", {
-            description: `${item.title} has been ${item.source === 'calendar' ? 'moved to' : 'added to'} ${format(start, "MMMM do")} at ${format(start, "h:mm a")}.`,
-            duration: 3000,
-          })
+          toast.success(
+            item.source === 'calendar' ? "Activity Moved" : "Activity Added", 
+            {
+              description: `${item.name} has been ${item.source === 'calendar' ? 'moved to' : 'added to'} ${format(start, "MMMM do")} at ${format(start, "h:mm a")}.`,
+            }
+          )
         } catch (error) {
-          toast.error("Failed to move activity", {
-            description: "There was an error moving the activity. Please try again.",
-          })
+          console.error("Error handling activity:", error);
+          toast.error(
+            item.source === 'calendar' ? "Failed to move activity" : "Failed to add activity", 
+            {
+              description: "Please try again.",
+            }
+          )
         }
       },
       collect: (monitor) => ({
@@ -299,18 +408,17 @@ function CalendarCell({
         canDrop: !!monitor.canDrop(),
       }),
     }),
-    [day, hour, onAddActivity, onRemoveActivity, plan.activities]
+    [day, hour, minute, onAddActivity, onRemoveActivity, activities]
   )
 
-  const cellActivities = (plan.activities || []).filter(activity => {
-    if (!activity.startTime) return false
+  const cellActivities = activities.filter(activity => {
+    if (!activity.fromDate) return false
 
-    const activityStart = new Date(activity.startTime)
-    const activityEnd = addHours(activityStart, activity.duration)
+    const activityStart = new Date(activity.fromDate)
+    const activityEnd = new Date(activity.toDate)
     const cellStart = new Date(day)
-    cellStart.setHours(hour, 0, 0, 0)
-    const cellEnd = new Date(day)
-    cellEnd.setHours(hour + 1, 0, 0, 0)
+    cellStart.setHours(hour, minute, 0, 0)
+    const cellEnd = addMinutes(cellStart, 15)
 
     return isWithinInterval(cellStart, { start: activityStart, end: activityEnd })
   })
@@ -319,28 +427,28 @@ function CalendarCell({
     <>
       <div
         ref={drop as any}
-        className={`h-16 border-t p-1 relative transition-colors ${isOver && canDrop ? "bg-primary/20" :
-          isOver && !canDrop ? "bg-destructive/20" : ""
-          }`}
+        className={`h-4 border-t p-1 relative transition-colors ${
+          isOver && canDrop ? "bg-primary/20" : isOver && !canDrop ? "bg-destructive/20" : ""
+        } ${minute === 0 ? 'border-t-2' : 'border-t-[0.5px] border-muted'}`}
       >
         {cellActivities.map(activity => {
-          if (!activity.startTime) return null
+          if (!activity.fromDate) return null
 
-          const activityStart = new Date(activity.startTime)
+          const activityStart = new Date(activity.fromDate)
           const activityStartHour = activityStart.getHours()
+          const activityStartMinute = activityStart.getMinutes()
 
-          if (hour !== activityStartHour) return null
+          // Check if this cell corresponds to the activity's start time
+          if (hour !== activityStartHour || minute !== activityStartMinute) return null
 
-          const heightInCells = activity.duration
           const backgroundColor = activityColors.get(activity.id)
 
           return (
             <DraggableActivity
-              key={activity.id}
+              key={activity.itineraryId}
               activity={activity}
-              heightInCells={heightInCells}
               backgroundColor={backgroundColor || ''}
-              onRemove={() => onRemoveActivity(activity.id)}
+              onRemove={() => activity.itineraryId && onRemoveActivity(activity.itineraryId)}
               onShowDetails={() => setShowDetailsForActivity(activity.id)}
             />
           )
@@ -349,7 +457,7 @@ function CalendarCell({
 
       {showDetailsForActivity && (
         <ActivityDetailsPanel
-          activity={plan.activities.find(a => a.id === showDetailsForActivity)!}
+          activity={activities.find(a => a.id === showDetailsForActivity)!}
           onClose={() => setShowDetailsForActivity(null)}
         />
       )}

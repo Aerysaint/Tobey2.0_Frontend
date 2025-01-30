@@ -1,12 +1,13 @@
 export interface Activity {
-  id: string
-  title: string
-  description: string
-  location: string
-  duration: number
-  cost: number
-  image: string
-  startTime: Date
+  id: string;          // Document ID from getAllActivities
+  itineraryId?: string; // ID from firestore itinerary collection
+  name: string;        // Previously title
+  cityName: string;    // Previously location
+  price: number;       // Previously cost
+  currency: string;    // New field
+  imageList: string[]; // New field replacing single image
+  fromDate?: string;   // For calendar activities
+  toDate?: string;     // For calendar activities
 }
 
 export interface Plan {

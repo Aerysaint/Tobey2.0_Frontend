@@ -30,28 +30,21 @@ export function ActivityCard({ activity, onRemove }: ActivityCardProps) {
           <CardContent className="flex flex-col gap-3 p-3">
             <div className="flex items-start gap-3">
               <img
-                src={activity.image || "/placeholder.svg"}
-                alt={activity.title}
+                src={activity.imageList[0] || "/placeholder.svg"}
+                alt={activity.name}
                 className="h-16 w-16 rounded-md object-cover"
               />
               <div className="flex-1">
-                <h3 className="font-medium">{activity.title}</h3>
+                <h3 className="font-medium">{activity.name}</h3>
                 <p className="text-sm text-muted-foreground flex items-center gap-1">
                   <MapPin className="h-3 w-3" />
-                  {activity.location}
+                  {activity.cityName}
                 </p>
-                <p className="mt-1 text-sm">₹{activity.cost.toLocaleString()}</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  <Clock className="inline h-3 w-3 mr-1" />
-                  Duration: {activity.duration}h
+                <p className="mt-1 text-sm">
+                  {activity.currency} {activity.price.toLocaleString()}
                 </p>
               </div>
             </div>
-            {activity.description && (
-              <p className="text-sm text-muted-foreground line-clamp-2">
-                {activity.description}
-              </p>
-            )}
             <div className="flex justify-end gap-2">
               <Button
                 variant="outline"

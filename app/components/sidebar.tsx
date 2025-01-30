@@ -11,6 +11,7 @@ import { groupsApi } from "@/services/groupsApi"
 import { toast } from "sonner"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
+import api from '@/lib/axios'
 
 interface SidebarProps {
   plan: Plan
@@ -34,36 +35,45 @@ export function Sidebar({
   // Load all available activities
   useEffect(() => {
     const loadActivities = async () => {
+      if (!currentGroupId) return;
+      
       try {
-        const activities = await groupsApi.getActivities()
-        setAvailableActivities(activities)
+        const response = await api.get(`/getAllActivities?groupid=${currentGroupId}`);
+        const activities: Activity[] = response.data.map(([docId, data]: [string, any]) => ({
+          id: docId,
+          name: data.Name,
+          cityName: data.CityName,
+          price: data.Price,
+          currency: data.Currency,
+          imageList: data.ImageList || []
+        }));
+        setAvailableActivities(activities);
       } catch (error) {
-        console.error("Error loading activities:", error)
-        toast.error("Failed to load activities")
+        console.error("Error loading activities:", error);
+        toast.error("Failed to load activities");
       }
-    }
+    };
 
-    loadActivities()
-  }, [])
+    loadActivities();
+  }, [currentGroupId]);
 
-  // Search activities when query changes
+  // Update search to use new activity structure
   useEffect(() => {
     if (!searchQuery.trim()) {
-      setSearchResults([])
-      return
+      setSearchResults([]);
+      return;
     }
 
-    setIsSearching(true)
-    const searchTerm = searchQuery.toLowerCase()
+    setIsSearching(true);
+    const searchTerm = searchQuery.toLowerCase();
     const results = availableActivities.filter(
       activity =>
-        activity.title.toLowerCase().includes(searchTerm) ||
-        activity.location.toLowerCase().includes(searchTerm) ||
-        activity.description.toLowerCase().includes(searchTerm)
-    )
-    setSearchResults(results)
-    setIsSearching(false)
-  }, [searchQuery, availableActivities])
+        activity.name.toLowerCase().includes(searchTerm) ||
+        activity.cityName.toLowerCase().includes(searchTerm)
+    );
+    setSearchResults(results);
+    setIsSearching(false);
+  }, [searchQuery, availableActivities]);
 
   if (!currentGroupId) {
     return (

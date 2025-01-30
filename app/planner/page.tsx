@@ -72,71 +72,68 @@ export default function PlannerPage() {
   const [isAIChatOpen, setIsAIChatOpen] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
 
-  // Check authentication and group access
+  // Check session and access
   useEffect(() => {
     const checkAccess = async () => {
-      console.log("Planner: Checking access", {
-        user: !!user,
-        searchParams: Object.fromEntries(searchParams.entries())
-      });
-
-      if (!user) {
-        console.log("Planner: No user, redirecting to /");
-        router.replace("/");
-        return;
-      }
-
-      const groupId = searchParams.get("group");
-      const isAIChat = searchParams.get("chat") === "ai";
-      console.log("Planner: Access check params:", { groupId, isAIChat });
-
-      // For AI chat without group, set loading false immediately
-      if (!groupId && isAIChat) {
-        console.log("Planner: AI chat without group, allowing access");
-        setIsLoading(false);
-        return;
-      }
-
-      // Allow access without group ID if AI chat is requested
-      if (!groupId && !isAIChat) {
-        console.log("Planner: No group and no AI chat, redirecting to /home");
-        router.replace("/home");
-        return;
-      }
-
-      if (groupId) {
-        console.log("Planner: Checking group access for:", groupId);
-        try {
-          const groupData = await groupsApi.getGroup(groupId);
-          if (!groupData) {
-            console.log("Planner: Group not found");
-            toast.error("Group not found");
-            router.replace("/home");
-            return;
-          }
-
-          // Check if user is a member
-          if (!groupData.members || !groupData.members[user.uid]) {
-            console.log("Planner: User not a member of group");
-            toast.error("You don't have access to this group");
-            router.replace("/home");
-            return;
-          }
-
-          console.log("Planner: Group access granted:", groupData);
-          setGroup(groupData);
-          setCurrentGroup(groupData);
-        } catch (error) {
-          console.error("Planner: Error checking group access:", error);
-          toast.error("Failed to load group");
+      try {
+        // Check session first
+        const sessionResponse = await api.get("/authenticateSession");
+        if (!sessionResponse.data.session) {
+          console.log("No valid session found, redirecting to home");
           router.replace("/home");
+          return;
         }
+
+        const groupId = searchParams.get("group");
+        const isAIChat = searchParams.get("chat") === "ai";
+        console.log("Planner: Access check params:", { groupId, isAIChat });
+
+        // For AI chat without group, set loading false immediately
+        if (!groupId && isAIChat) {
+          console.log("Planner: AI chat without group, allowing access");
+          setIsLoading(false);
+          return;
+        }
+
+        // Allow access without group ID if AI chat is requested
+        if (!groupId && !isAIChat) {
+          console.log("Planner: No group and no AI chat, redirecting to home");
+          router.replace("/home");
+          return;
+        }
+
+        if (groupId) {
+          console.log("Planner: Checking group access for:", groupId);
+          try {
+            const groupResponse = await api.get(`/getGroupName?groupId=${groupId}`);
+            const memberCountResponse = await api.get(`/getGroupMemberCount?groupId=${groupId}`);
+
+            const groupData = {
+              id: groupId,
+              name: groupResponse.data.name,
+              memberCount: memberCountResponse.data.count
+            };
+
+            console.log("Planner: Group access granted:", groupData);
+            setGroup(groupData);
+            setCurrentGroup(groupData);
+          } catch (error) {
+            console.error("Planner: Error checking group access:", error);
+            toast.error("Failed to load group");
+            router.replace("/home");
+            return;
+          }
+        }
+        setIsLoading(false);
+      } catch (error) {
+        console.error("Error checking access:", error);
+        toast.error("Failed to verify access");
+        router.replace("/home");
       }
-      setIsLoading(false);
     };
 
     checkAccess();
-  }, [user, router, searchParams]);
+  }, [router, searchParams]);
 
   // Handle AI chat from URL
   useEffect(() => {
@@ -419,6 +416,7 @@ export default function PlannerPage() {
                   plan={currentGroup?.plan || defaultPlan}
                   onAddActivity={handleAddActivity}
                   onRemoveActivity={handleRemoveActivity}
+                  groupId={searchParams.get("group") || ""}
                 />
               </div>
             </>
