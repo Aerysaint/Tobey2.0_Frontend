@@ -1,40 +1,59 @@
-import { Settings, Home, Share2, Trash2, MessageCircle } from "lucide-react"
+import { Settings, Home, Share2, MessageCircle } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import type { Plan } from "@/types"
+import { useState, useEffect } from "react"
+import { toast, Toaster } from "sonner"
+import { Input } from "@/components/ui/input"
 
 interface HeaderProps {
-  plan: Plan
+  budget: number
+  spent: number
   onUpdateBudget: (amount: number) => void
   onHome: () => void
   onShare: () => void
-  onClearAllNodes: () => void
   onToggleGroupChats: () => void
 }
 
-export function Header({ plan, onUpdateBudget, onHome, onShare, onClearAllNodes, onToggleGroupChats }: HeaderProps) {
-  const handleBudgetUpdate = () => {
-    const newBudget = prompt("Enter new budget:", plan.budget.toString())
-    if (newBudget) {
-      const updatedBudget = Number(newBudget)
-      if (!isNaN(updatedBudget)) {
-        onUpdateBudget(updatedBudget)
-      } else {
-        alert("Please enter a valid number for the budget.")
-      }
+export function Header({
+  budget,
+  spent,
+  onUpdateBudget,
+  onHome,
+  onShare,
+  onToggleGroupChats,
+}: HeaderProps) {
+  const [isEditingBudget, setIsEditingBudget] = useState(false)
+  const [tempBudget, setTempBudget] = useState(budget.toString())
+
+  // Update tempBudget when budget prop changes
+  useEffect(() => {
+    setTempBudget(budget.toString());
+  }, [budget]);
+
+  const handleBudgetSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    const newBudget = parseFloat(tempBudget)
+    if (isNaN(newBudget) || newBudget < 0) {
+      toast.error("Please enter a valid budget amount")
+      return
     }
+    onUpdateBudget(newBudget)
+    setIsEditingBudget(false)
   }
 
   return (
-    <header className="flex items-center justify-between border-b px-6 py-3">
-      <div className="flex items-center space-x-4">
+    <header className="flex items-center border-b px-6 py-3">
+      {/* Left section */}
+      <div className="flex items-center space-x-4 w-1/3">
         <Button variant="ghost" size="icon" onClick={onHome}>
           <Home className="h-4 w-4" />
         </Button>
-        <h1 className="text-xl font-semibold">{plan.title}</h1>
+        <h1 className="text-xl font-semibold">Plan Title</h1>
       </div>
 
-      <div className="flex items-center space-x-2">
+      {/* Center section */}
+      <div className="flex items-center justify-center space-x-2 w-1/3">
         <Button
           variant="ghost"
           size="sm"
@@ -49,20 +68,40 @@ export function Header({ plan, onUpdateBudget, onHome, onShare, onClearAllNodes,
         </Button>
       </div>
 
-      <div className="flex items-center space-x-4">
-        <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-          <span>BUDGET</span>
-          <span className="font-medium text-foreground">₹{plan.budget.toLocaleString()}</span>
-          <Button variant="outline" size="sm" onClick={handleBudgetUpdate}>
-            Update Budget
-          </Button>
-        </div>
-        <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-          <span>SPENT</span>
-          <span className="font-medium text-foreground">₹{plan.spent.toLocaleString()}</span>
-          <Button variant="ghost" size="icon" onClick={onClearAllNodes}>
-            <Trash2 className="h-4 w-4" />
-          </Button>
+      {/* Right section */}
+      <div className="flex items-center justify-end w-1/3">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Budget:</span>
+            {isEditingBudget ? (
+              <form onSubmit={handleBudgetSubmit} className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  value={tempBudget}
+                  onChange={(e) => setTempBudget(e.target.value)}
+                  className="w-24"
+                  autoFocus
+                  onBlur={() => setIsEditingBudget(false)}
+                />
+              </form>
+            ) : (
+              <Button
+                variant="ghost"
+                className="text-sm"
+                onClick={() => setIsEditingBudget(true)}
+              >
+                ₹{budget.toLocaleString()}
+              </Button>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Spent:</span>
+            <span className="text-sm">₹{spent.toLocaleString()}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Remaining:</span>
+            <span className="text-sm">₹{(budget - spent).toLocaleString()}</span>
+          </div>
         </div>
       </div>
     </header>

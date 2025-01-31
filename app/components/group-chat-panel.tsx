@@ -1,38 +1,24 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Send, X, GripVertical } from "lucide-react"
+import { Send, X, AtSign } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { database } from "@/lib/firebase"
-import { ref, push, onValue, off, get } from "firebase/database"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { db } from "@/lib/firebase"
+import { collection, onSnapshot, query, orderBy } from "firebase/firestore"
 import { useAuth } from "@/app/contexts/auth-context"
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command"
+import api from '@/lib/axios'
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import ReactMarkdown from 'react-markdown'
 
 interface Message {
-  id: string
-  text: string
-  sender: {
-    id: string
-    name: string
-  }
-  mentions?: string[] // Array of user IDs that were mentioned
-  timestamp: number
-}
-
-interface GroupMember {
-  displayName: string
-  joinedAt: number
+  user: string
+  message: string
+  timestamp: string
+  pending?: boolean
+  tempId?: string
 }
 
 interface GroupChatPanelProps {
@@ -46,31 +32,23 @@ export function GroupChatPanel({ groupId, groupName, onClose }: GroupChatPanelPr
   const [newMessage, setNewMessage] = useState("")
   const [width, setWidth] = useState(320)
   const [isResizing, setIsResizing] = useState(false)
-  const [members, setMembers] = useState<Record<string, GroupMember>>({})
-  const [showMentions, setShowMentions] = useState(false)
-  const [mentionSearch, setMentionSearch] = useState("")
-  const [cursorPosition, setCursorPosition] = useState(0)
-  const inputRef = useRef<HTMLInputElement>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const resizeRef = useRef<HTMLDivElement>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
   const { user } = useAuth()
-
-  // Load group members
-  useEffect(() => {
-    const membersRef = ref(database, `groups/${groupId}/members`)
-    onValue(membersRef, (snapshot) => {
-      if (snapshot.exists()) {
-        setMembers(snapshot.val())
-      }
-    })
-  }, [groupId])
+  const [showMentionPopup, setShowMentionPopup] = useState(false)
+  const [cursorPosition, setCursorPosition] = useState(0)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   // Handle resizing
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isResizing) return
-      const newWidth = Math.max(320, Math.min(800, e.clientX - (resizeRef.current?.getBoundingClientRect().left || 0)))
-      setWidth(newWidth)
+      
+      const newWidth = window.innerWidth - e.clientX
+      // Constrain width between 320px and 800px
+      const constrainedWidth = Math.max(320, Math.min(800, newWidth))
+      setWidth(constrainedWidth)
     }
 
     const handleMouseUp = () => {
@@ -88,126 +66,133 @@ export function GroupChatPanel({ groupId, groupName, onClose }: GroupChatPanelPr
     }
   }, [isResizing])
 
-  const getFirstName = (fullName: string) => {
-    return fullName.split(' ')[0];
-  };
-
-  // Load and subscribe to messages
-  useEffect(() => {
-    const messagesRef = ref(database, `chats/${groupId}/messages`)
-
-    onValue(messagesRef, (snapshot) => {
-      const messages: Message[] = []
-      snapshot.forEach((childSnapshot) => {
-        messages.push({
-          id: childSnapshot.key!,
-          ...childSnapshot.val()
-        })
-      })
-      setMessages(messages.sort((a, b) => a.timestamp - b.timestamp))
-
-      // Scroll to bottom when new messages arrive
-      if (scrollAreaRef.current) {
-        setTimeout(() => {
-          scrollAreaRef.current!.scrollTop = scrollAreaRef.current!.scrollHeight
-        }, 0)
-      }
-    })
-
-    return () => off(messagesRef)
-  }, [groupId])
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value
-    const position = e.target.selectionStart || 0
-    setNewMessage(value)
-    setCursorPosition(position)
-
-    // Check if we should show mentions
-    const lastAtSymbol = value.lastIndexOf('@', position)
-    if (lastAtSymbol !== -1) {
-      const nextSpace = value.indexOf(' ', lastAtSymbol)
-      const searchEnd = nextSpace === -1 ? value.length : nextSpace
-      const search = value.slice(lastAtSymbol + 1, searchEnd)
-
-      if (position > lastAtSymbol) {
-        setMentionSearch(search)
-        setShowMentions(true)
-        return
-      }
+  // Helper function to scroll to bottom
+  const scrollToBottom = () => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" })
     }
-
-    setShowMentions(false)
   }
 
-  const handleMentionSelect = (userId: string, displayName: string) => {
-    const firstName = getFirstName(displayName);
-    const lastAtSymbol = newMessage.lastIndexOf('@', cursorPosition)
-    if (lastAtSymbol === -1) return
+  // Load and subscribe to messages from Firestore
+  useEffect(() => {
+    if (!groupId) return
 
-    const nextSpace = newMessage.indexOf(' ', lastAtSymbol)
-    const beforeMention = newMessage.slice(0, lastAtSymbol)
-    const afterMention = nextSpace === -1 ? '' : newMessage.slice(nextSpace)
+    const messagesRef = collection(db, 'sessions', groupId, 'group chat')
+    const messagesQuery = query(messagesRef, orderBy('__name__', 'asc'))
 
-    const newValue = `${beforeMention}@${firstName}${afterMention}`
-    setNewMessage(newValue)
-    setShowMentions(false)
-    inputRef.current?.focus()
+    const unsubscribe = onSnapshot(messagesQuery, (snapshot) => {
+      const newMessages: Message[] = []
+      snapshot.forEach((doc) => {
+        const data = doc.data()
+        newMessages.push({
+          user: data.user,
+          message: data.message,
+          timestamp: doc.id
+        })
+      })
+      
+      // Merge with pending messages, but remove any pending messages that have been confirmed
+      setMessages(currentMessages => {
+        const pendingMessages = currentMessages.filter(msg => {
+          if (!msg.pending) return false
+          // Keep pending message only if it hasn't appeared in Firestore yet
+          return !newMessages.some(newMsg => 
+            newMsg.user === msg.user && 
+            newMsg.message === msg.message
+          )
+        })
+        return [...newMessages, ...pendingMessages]
+      })
+    })
+
+    return () => unsubscribe()
+  }, [groupId])
+
+  // Effect to handle scrolling whenever messages change
+  useEffect(() => {
+    scrollToBottom()
+  }, [messages])
+
+  // Handle input changes including @ mentions
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value
+    const cursorPos = e.target.selectionStart || 0
+    
+    // Show mention popup if @ is typed and Tobey hasn't been mentioned yet
+    if (value[cursorPos - 1] === '@' && !value.includes('@Tobey')) {
+      setShowMentionPopup(true)
+      setCursorPosition(cursorPos)
+    } else if (!value.includes('@') || value[cursorPos - 1] === ' ') {
+      setShowMentionPopup(false)
+    }
+    
+    setNewMessage(value)
+  }
+
+  // Handle selecting Tobey mention
+  const handleMention = () => {
+    const beforeMention = newMessage.slice(0, cursorPosition - 1) // Remove the @
+    const afterMention = newMessage.slice(cursorPosition)
+    const updatedMessage = `${beforeMention}@Tobey${afterMention}`
+    
+    setNewMessage(updatedMessage)
+    setShowMentionPopup(false)
+    
+    // Focus input and move cursor after the mention
+    if (inputRef.current) {
+      inputRef.current.focus()
+      const newCursorPos = cursorPosition + 5 // "@Tobey" is 6 chars, but we removed 1 (@)
+      setTimeout(() => {
+        inputRef.current?.setSelectionRange(newCursorPos, newCursorPos)
+      }, 0)
+    }
+  }
+
+  // Handle key press for mention autocomplete and space
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (showMentionPopup) {
+      if (e.key === 'Enter') {
+        e.preventDefault() // Prevent form submission
+        handleMention()
+      } else if (e.key === ' ') {
+        setShowMentionPopup(false)
+      }
+    }
   }
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (showMentionPopup) {
+      return // Don't send if mention popup is open
+    }
     if (!newMessage.trim() || !user) return
 
-    // Extract mentions from message
-    const mentions: string[] = []
-    const mentionRegex = /@([a-zA-Z0-9_]+)/g
-    let match
-    while ((match = mentionRegex.exec(newMessage)) !== null) {
-      const mentionedName = match[1]
-      const mentionedUserId = Object.entries(members).find(
-        ([_, member]) => getFirstName(member.displayName) === mentionedName
-      )?.[0]
-      if (mentionedUserId) {
-        mentions.push(mentionedUserId)
-      }
+    const tempId = Date.now().toString()
+    const optimisticMessage: Message = {
+      user: user.displayName || 'Unknown User',
+      message: newMessage,
+      timestamp: new Date().toISOString(),
+      pending: true,
+      tempId
     }
 
-    const messagesRef = ref(database, `chats/${groupId}/messages`)
-    await push(messagesRef, {
-      text: newMessage,
-      sender: {
-        id: user.uid,
-        name: getFirstName(user.displayName || "Anonymous")
-      },
-      mentions,
-      timestamp: Date.now()
-    })
-
+    // Add optimistic message
+    setMessages(current => [...current, optimisticMessage])
     setNewMessage("")
+
+    try {
+      await api.get('/addGroupMessage', {
+        params: {
+          groupid: groupId,
+          message: newMessage
+        }
+      })
+    } catch (error) {
+      console.error("Error sending message:", error)
+      // Remove the failed message
+      setMessages(current => current.filter(msg => msg.tempId !== tempId))
+    }
   }
-
-  const formatMessageText = (text: string) => {
-    return text.split(' ').map((word, i) => {
-      if (word.startsWith('@')) {
-        // Extract the username without the @ symbol
-        const mentionedName = word.slice(1);
-        // Check if this mention corresponds to a valid user
-        const isValidMention = Object.values(members).some(
-          member => getFirstName(member.displayName) === mentionedName
-        );
-
-        return isValidMention ? (
-          <span key={i} className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded px-1">
-            {word}
-          </span>
-        ) : (
-          word + ' '
-        );
-      }
-      return word + ' ';
-    });
-  };
 
   return (
     <div
@@ -217,13 +202,9 @@ export function GroupChatPanel({ groupId, groupName, onClose }: GroupChatPanelPr
       {/* Resize Handle */}
       <div
         ref={resizeRef}
-        className="absolute left-0 top-0 w-1 h-full cursor-ew-resize hover:bg-primary/10 group"
+        className="absolute left-0 top-0 w-1 h-full cursor-ew-resize hover:bg-primary/10 z-50"
         onMouseDown={() => setIsResizing(true)}
-      >
-        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-4 h-8 -translate-x-1/2 rounded flex items-center justify-center bg-background border shadow-sm opacity-0 group-hover:opacity-100">
-          <GripVertical className="h-4 w-4 text-muted-foreground" />
-        </div>
-      </div>
+      />
 
       {/* Header */}
       <div className="p-4 border-b flex items-center justify-between bg-muted/50">
@@ -242,60 +223,82 @@ export function GroupChatPanel({ groupId, groupName, onClose }: GroupChatPanelPr
       </div>
 
       {/* Messages */}
-      <ScrollArea ref={scrollAreaRef} className="flex-1 p-4">
+      <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
         <div className="space-y-4">
-          {messages.map((message) => (
+          {messages.map((message, index) => (
             <div
-              key={message.id}
-              className={`flex flex-col max-w-[80%] ${message.sender.id === user?.uid ? "ml-auto items-end" : ""}`}
+              key={message.tempId || message.timestamp}
+              className={`flex flex-col max-w-[80%] ${message.user === user?.displayName ? "ml-auto items-end" : ""}`}
             >
               <div
-                className={`rounded-lg p-3 ${message.sender.id === user?.uid
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted"
-                  }`}
+                className={`rounded-lg p-3 ${
+                  message.user === user?.displayName
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted"
+                } ${message.pending ? "opacity-70" : ""}`}
               >
-                <p className="text-sm font-medium mb-1">{message.sender.name}</p>
-                <p className="text-sm">{formatMessageText(message.text)}</p>
-                <p className="text-xs opacity-70 mt-1">
-                  {new Date(message.timestamp).toLocaleTimeString()}
-                </p>
+                <p className="text-sm font-medium mb-1">{message.user}</p>
+                <div className="text-sm break-words">
+                  <ReactMarkdown
+                    components={{
+                      // Override default element styling
+                      p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
+                      a: ({ href, children }) => (
+                        <a href={href} target="_blank" rel="noopener noreferrer" className="underline hover:no-underline">
+                          {children}
+                        </a>
+                      ),
+                      ul: ({ children }) => <ul className="list-disc ml-4 mb-1">{children}</ul>,
+                      ol: ({ children }) => <ol className="list-decimal ml-4 mb-1">{children}</ol>,
+                      code: ({ children }) => (
+                        <code className="bg-primary/20 rounded px-1 py-0.5">{children}</code>
+                      ),
+                      pre: ({ children }) => (
+                        <pre className="bg-primary/20 rounded p-2 my-1 overflow-x-auto">
+                          {children}
+                        </pre>
+                      ),
+                    }}
+                  >
+                    {message.message}
+                  </ReactMarkdown>
+                </div>
+                {message.pending && (
+                  <p className="text-xs opacity-70 mt-1">Sending...</p>
+                )}
               </div>
             </div>
           ))}
+          {/* Add invisible div at the bottom for scrolling */}
+          <div ref={messagesEndRef} />
         </div>
       </ScrollArea>
 
-      {/* Input */}
+      {/* Input with Mention Popup */}
       <form onSubmit={handleSendMessage} className="p-4 border-t relative">
         <div className="flex gap-2">
-          <div className="flex-1 relative">
+          <div className="relative flex-1">
             <Input
               ref={inputRef}
-              placeholder="Type a message... (Use @ to mention)"
+              placeholder="Type a message..."
               value={newMessage}
               onChange={handleInputChange}
+              onKeyDown={handleKeyPress}
             />
-            {showMentions && (
-              <div className="absolute bottom-full mb-1 w-full bg-popover border rounded-md shadow-md">
-                <Command>
-                  <CommandList>
-                    <CommandGroup>
-                      {Object.entries(members)
-                        .filter(([_, member]) =>
-                          getFirstName(member.displayName).toLowerCase().includes(mentionSearch.toLowerCase())
-                        )
-                        .map(([userId, member]) => (
-                          <CommandItem
-                            key={userId}
-                            onSelect={() => handleMentionSelect(userId, member.displayName)}
-                          >
-                            {getFirstName(member.displayName)}
-                          </CommandItem>
-                        ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
+            {showMentionPopup && (
+              <div className="absolute bottom-full mb-2 left-0 bg-popover border rounded-lg shadow-lg p-2 min-w-[200px]">
+                <button
+                  type="button"
+                  className="flex items-center gap-2 w-full hover:bg-muted p-2 rounded-md"
+                  onClick={handleMention}
+                >
+                  <Avatar className="h-6 w-6">
+                    <AvatarFallback>
+                      <AtSign className="h-4 w-4" />
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="text-sm">Tobey (AI Assistant)</span>
+                </button>
               </div>
             )}
           </div>

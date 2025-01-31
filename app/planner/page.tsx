@@ -6,11 +6,8 @@ import { DndProvider } from "react-dnd"
 import { HTML5Backend } from "react-dnd-html5-backend"
 import { Calendar } from "../components/calendar"
 import { Sidebar } from "../components/sidebar"
-import { GroupChatsPage } from "../components/group-chats-page"
-import { ChatPanel } from "../components/chat-panel"
 import { Header } from "../components/header"
 import type { Plan, Activity, ChatMessage } from "@/types"
-import { GroupSelection } from "../components/group-selection"
 import { AIAssistantChat } from "../components/ai-assistant-chat"
 import { toast, Toaster } from "sonner"
 import { groupsApi } from "@/services/groupsApi"
@@ -19,6 +16,9 @@ import { GroupChatPanel } from "../components/group-chat-panel"
 import { useAuth } from "@/app/contexts/auth-context"
 import { Loader2 } from "lucide-react"
 import api from '@/lib/axios'
+import { doc, onSnapshot, collection, query } from "firebase/firestore"
+import { db } from "@/lib/firebase"
+import { addDays, startOfDay, isSameDay } from "date-fns"
 
 const defaultPlan: Plan = {
   id: "default",
@@ -71,6 +71,9 @@ export default function PlannerPage() {
   const [currentGroup, setCurrentGroup] = useState<Group | null>(null)
   const [isAIChatOpen, setIsAIChatOpen] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
+  const [budget, setBudget] = useState<number>(0)
+  const [spent, setSpent] = useState<number>(0)
+  const [activities, setActivities] = useState<Activity[]>([])
 
   // Check session and access
   useEffect(() => {
@@ -160,6 +163,67 @@ export default function PlannerPage() {
     }
   }, [currentGroup?.id, isUpdating])
 
+  // Subscribe to budget changes in Firestore
+  useEffect(() => {
+    if (!currentGroup?.id) return;
+
+    const groupDoc = doc(db, 'sessions', currentGroup.id);
+    
+    const unsubscribe = onSnapshot(groupDoc, (doc) => {
+      if (doc.exists()) {
+        const data = doc.data();
+        setBudget(data.budget || 0);
+      } else {
+        setBudget(0);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [currentGroup?.id]);
+
+  // Subscribe to activities in Firestore to calculate spent amount
+  useEffect(() => {
+    if (!currentGroup?.id) return;
+
+    const itineraryRef = collection(db, 'sessions', currentGroup.id, 'itinerary');
+    
+    const unsubscribe = onSnapshot(query(itineraryRef), (snapshot) => {
+      const updatedActivities: Activity[] = [];
+      let totalSpent = 0;
+      
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        const activity = {
+          id: data.id,
+          itineraryId: doc.id,
+          name: data.Name,
+          cityName: data.CityName,
+          price: data.Price,
+          currency: data.Currency,
+          imageList: data.ImageList || [],
+          fromDate: data.FromDate,
+          toDate: data.ToDate
+        };
+        updatedActivities.push(activity);
+        totalSpent += data.Price || 0;
+      });
+
+      setActivities(updatedActivities);
+      setSpent(totalSpent);
+    });
+
+    return () => unsubscribe();
+  }, [currentGroup?.id]);
+
+  // Calculate per day costs
+  const getDayBudget = useCallback((day: Date) => {
+    return activities.reduce((total, activity) => {
+      if (!activity.fromDate) return total;
+      const activityStart = new Date(activity.fromDate);
+      return isSameDay(activityStart, day) ? total + (activity.price || 0) : total;
+    }, 0);
+  }, [activities]);
+
   const handleCreateGroup = useCallback(async (groupName: string) => {
     console.log("Creating group:", groupName);
     if (!user) {
@@ -199,13 +263,16 @@ export default function PlannerPage() {
   const handleUpdateBudget = useCallback(
     async (amount: number) => {
       if (!currentGroup) {
-        dispatch({ type: "UPDATE_BUDGET", amount });
+        toast.error("No group selected");
         return;
       }
 
       try {
-        await api.post(`/updateBudget?groupId=${currentGroup.id}`, {
-          budget: amount
+        await api.get('/updateBudget', {
+          params: {
+            groupid: currentGroup.id,
+            budget: amount
+          }
         });
         
         toast.success("Budget Updated", {
@@ -216,7 +283,7 @@ export default function PlannerPage() {
         toast.error("Failed to update budget");
       }
     },
-    [currentGroup, dispatch]
+    [currentGroup]
   );
 
   const handleToggleChat = useCallback(() => {
@@ -370,7 +437,8 @@ export default function PlannerPage() {
       <div className="flex flex-col h-screen overflow-hidden">
         <Toaster richColors position="top-center" />
         <Header
-          plan={currentGroup?.plan || defaultPlan}
+          budget={budget}
+          spent={spent}
           onUpdateBudget={handleUpdateBudget}
           onHome={() => router.push("/home")}
           onShare={() => {
@@ -417,6 +485,8 @@ export default function PlannerPage() {
                   onAddActivity={handleAddActivity}
                   onRemoveActivity={handleRemoveActivity}
                   groupId={searchParams.get("group") || ""}
+                  activities={activities}
+                  getDayBudget={getDayBudget}
                 />
               </div>
             </>

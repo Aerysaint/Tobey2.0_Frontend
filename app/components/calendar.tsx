@@ -19,11 +19,12 @@ import { format as formatDate, addMinutes } from "date-fns";
 interface CalendarProps {
   plan: Plan
   groupId: string
+  activities: Activity[]
+  getDayBudget: (day: Date) => number
 }
 
-export function Calendar({ plan, groupId }: CalendarProps) {
+export function Calendar({ plan, groupId, activities, getDayBudget }: CalendarProps) {
   const [startDate, setStartDate] = useState(startOfWeek(new Date()))
-  const [activities, setActivities] = useState<Activity[]>([])
   const days = Array.from({ length: 7 }, (_, i) => addDays(startDate, i))
   const hours = Array.from({ length: 24 }, (_, i) => i)
   const quarterHours = [0, 15, 30, 45] // 15-minute intervals
@@ -52,7 +53,7 @@ export function Calendar({ plan, groupId }: CalendarProps) {
         });
       });
 
-      setActivities(updatedActivities);
+      //setActivities(updatedActivities);
     });
 
     return () => unsubscribe();
@@ -77,7 +78,7 @@ export function Calendar({ plan, groupId }: CalendarProps) {
 
       console.log(groupId);
 
-      await api.get('/addActivityToItinerary', {
+      const response = await api.get('/addActivityToItinerary', {
         params: {
           groupid: groupId,
           activityid: activity.id,
@@ -85,6 +86,13 @@ export function Calendar({ plan, groupId }: CalendarProps) {
           todate: toDate
         }
       });
+
+      if (response.data === -1) {
+          toast.error("Failed to add activity to itinerary", {
+          description: "The activity may overlap with existing activities"
+        });
+        return;
+      }
 
       toast.success("Activity added to calendar");
     } catch (error) {
@@ -117,13 +125,6 @@ export function Calendar({ plan, groupId }: CalendarProps) {
       toast.error("Failed to remove activity from calendar");
     }
   };
-
-  const getDayBudget = (day: Date) => {
-    return (plan.activities || []).reduce((total, activity) => {
-      const activityStart = new Date(activity.startTime || 0)
-      return isSameDay(activityStart, day) ? total + (activity.cost || 0) : total
-    }, 0)
-  }
 
   const handlePrevWeek = () => {
     setStartDate((prevDate) => subDays(prevDate, 7))
@@ -227,80 +228,165 @@ interface DraggableActivityProps {
   activity: Activity
   backgroundColor: string
   onRemove: () => void
-  onShowDetails: () => void
   visibleDuration: number
   isStartOfVisible: boolean
+  onResize: (direction: 'top' | 'bottom', newDate: Date) => Promise<void>
 }
 
-function DraggableActivity({ activity, backgroundColor, onRemove, onShowDetails, visibleDuration, isStartOfVisible }: DraggableActivityProps) {
+function DraggableActivity({ 
+  activity, 
+  backgroundColor, 
+  onRemove, 
+  visibleDuration, 
+  isStartOfVisible,
+  onResize 
+}: DraggableActivityProps) {
+  const [isResizing, setIsResizing] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
   const [{ isDragging }, drag] = useDrag(() => ({
     type: "CALENDAR_ACTIVITY",
     item: { ...activity, source: 'calendar' },
     collect: (monitor) => ({
       isDragging: monitor.isDragging(),
     }),
-  }), [activity])
+    canDrag: () => !isResizing,
+  }), [activity, isResizing])
+
+  // Calculate if we should show full content based on visible duration
+  // 4 cells (1 hour) is minimum for full content
+  const showFullContent = visibleDuration >= 60;
+
+  const handleResizeMouseDown = (direction: 'top' | 'bottom') => (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsResizing(true);
+
+    const startY = e.clientY;
+    const cellHeight = 16; // Height of each 15-minute cell
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      moveEvent.preventDefault();
+      const deltaY = moveEvent.clientY - startY;
+      const cellsDelta = Math.round(deltaY / cellHeight);
+      
+      const originalDate = new Date(direction === 'top' ? activity.fromDate : activity.toDate);
+      const newDate = addMinutes(originalDate, cellsDelta * 15);
+      
+      // Update the visual position immediately
+      const resizeHandle = moveEvent.target as HTMLElement;
+      resizeHandle.style.cursor = 'ns-resize';
+    };
+
+    const handleMouseUp = async (upEvent: MouseEvent) => {
+      setIsResizing(false);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+
+      const deltaY = upEvent.clientY - startY;
+      const cellsDelta = Math.round(deltaY / cellHeight);
+      const originalDate = new Date(direction === 'top' ? activity.fromDate : activity.toDate);
+      const newDate = addMinutes(originalDate, cellsDelta * 15);
+
+      await onResize(direction, newDate);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
+  const handleClick = (e: React.MouseEvent) => {
+    // Only show details if we're not dragging or resizing
+    if (!isDragging && !isResizing) {
+      e.stopPropagation();
+      setShowDetails(true);
+    }
+  };
 
   return (
-    <div
-      ref={drag as any}
-      className={`group absolute inset-x-1 rounded-md overflow-hidden cursor-move ${isDragging ? 'opacity-50' : ''}`}
-      style={{
-        top: 0,
-        height: `${(visibleDuration / 15) * 16}px`,
-        zIndex: 10,
-        backgroundColor
-      }}
-    >
-      {isStartOfVisible && (
-        <div className="relative h-full p-2 text-white">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute right-1 top-1 h-6 w-6 rounded-full p-0 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/20"
-            onClick={onRemove}
-          >
-            <X className="h-3 w-3" />
-          </Button>
+    <>
+      <div
+        ref={drag as any}
+        className={`group absolute inset-x-1 rounded-md overflow-hidden ${isDragging ? 'opacity-50' : ''}`}
+        style={{
+          top: 0,
+          height: `${(visibleDuration / 15) * 16}px`,
+          zIndex: 10,
+          backgroundColor,
+          cursor: 'move'
+        }}
+        onClick={handleClick}
+      >
+        {/* Resize handles */}
+        <div
+          className="absolute top-0 left-0 right-0 h-2 cursor-ns-resize -translate-y-1 z-20"
+          onMouseDown={handleResizeMouseDown('top')}
+        />
+        <div
+          className="absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize translate-y-1 z-20"
+          onMouseDown={handleResizeMouseDown('bottom')}
+        />
 
-          <div className="flex items-start gap-2">
-            <img
-              src={activity.imageList[0] || "/placeholder.svg"}
-              alt={activity.name}
-              className="h-12 w-12 rounded object-cover flex-none"
-            />
-            <div className="flex-1 min-w-0">
-              <h4 className="font-medium text-sm truncate">{activity.name}</h4>
-              <p className="text-xs text-white/90 truncate">
-                <MapPin className="inline h-3 w-3 mr-1" />
-                {activity.cityName}
-              </p>
-              <p className="text-xs text-white/75">
-                {activity.currency} {activity.price.toLocaleString()}
-              </p>
-              {/* Add time display */}
-              <p className="text-xs text-white/75 mt-1">
-                <Clock className="inline h-3 w-3 mr-1" />
-                {activity.fromDate && format(new Date(activity.fromDate), "h:mm a")} - 
-                {activity.toDate && format(new Date(activity.toDate), "h:mm a")}
-              </p>
-            </div>
+        {/* Activity content */}
+        {isStartOfVisible && (
+          <div className="relative h-full p-2 text-white overflow-hidden">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute right-1 top-1 h-6 w-6 rounded-full p-0 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/20"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemove();
+              }}
+            >
+              <X className="h-3 w-3" />
+            </Button>
+
+            {showFullContent ? (
+              // Full content for activities 1 hour or longer
+              <div className="flex items-start gap-2 h-full">
+                <img
+                  src={activity.imageList[0] || "/placeholder.svg"}
+                  alt={activity.name}
+                  className="h-12 w-12 rounded object-cover flex-none"
+                />
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-medium text-sm truncate">{activity.name}</h4>
+                  <p className="text-xs text-white/90 truncate">
+                    <MapPin className="inline h-3 w-3 mr-1" />
+                    {activity.cityName}
+                  </p>
+                  <p className="text-xs text-white/75">
+                    {activity.currency} {activity.price.toLocaleString()}
+                  </p>
+                  <p className="text-xs text-white/75 mt-1">
+                    <Clock className="inline h-3 w-3 mr-1" />
+                    {activity.fromDate && format(new Date(activity.fromDate), "h:mm a")} - 
+                    {activity.toDate && format(new Date(activity.toDate), "h:mm a")}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              // Compact content for smaller activities
+              <div className="flex items-center h-full">
+                <h4 className="font-medium text-sm truncate">
+                  {activity.name}
+                </h4>
+              </div>
+            )}
           </div>
+        )}
+        {!isStartOfVisible && (
+          <div className="h-full bg-black/20" />
+        )}
+      </div>
 
-          <Button
-            variant="ghost"
-            className="absolute bottom-0 left-0 right-0 h-8 rounded-none bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/40 text-xs font-medium"
-            onClick={onShowDetails}
-          >
-            <Info className="h-3 w-3 mr-1.5" />
-            Show Details
-          </Button>
-        </div>
+      {/* Activity Details Panel */}
+      {showDetails && (
+        <ActivityDetailsPanel
+          activity={activity}
+          onClose={() => setShowDetails(false)}
+        />
       )}
-      {!isStartOfVisible && (
-        <div className="h-full bg-black/20" />
-      )}
-    </div>
+    </>
   )
 }
 
@@ -439,6 +525,51 @@ function CalendarCell({
            isWithinInterval(activityEnd, { start: dayStart, end: dayEnd })
   })
 
+  const handleResize = async (activity: Activity, direction: 'top' | 'bottom', newDate: Date) => {
+    try {
+      const fromDate = direction === 'top' ? newDate : new Date(activity.fromDate);
+      const toDate = direction === 'bottom' ? newDate : new Date(activity.toDate);
+
+      // Validate the new times
+      if (fromDate >= toDate) {
+        toast.error("Invalid time range");
+        return;
+      }
+
+      // Check for overlaps
+      const hasOverlap = activities.some(existingActivity => {
+        if (!existingActivity.fromDate || existingActivity.itineraryId === activity.itineraryId) return false;
+
+        const existingStart = new Date(existingActivity.fromDate);
+        const existingEnd = new Date(existingActivity.toDate);
+
+        return (
+          (fromDate < existingEnd && toDate > existingStart) ||
+          (fromDate < existingStart && toDate > existingEnd)
+        );
+      });
+
+      if (hasOverlap) {
+        toast.error("Cannot resize: overlaps with another activity");
+        return;
+      }
+
+      await api.get('/updateActivityInItinerary', {
+        params: {
+          groupid: groupId,
+          activityid: activity.itineraryId,
+          fromdate: formatDate(fromDate, "yyyy-MM-dd'T'HH:mm:ss"),
+          todate: formatDate(toDate, "yyyy-MM-dd'T'HH:mm:ss")
+        }
+      });
+
+      toast.success("Activity updated successfully");
+    } catch (error) {
+      console.error("Error resizing activity:", error);
+      toast.error("Failed to update activity");
+    }
+  };
+
   return (
     <>
       <div
@@ -475,9 +606,9 @@ function CalendarCell({
               activity={activity}
               backgroundColor={backgroundColor || ''}
               onRemove={() => activity.itineraryId && onRemoveActivity(activity.itineraryId)}
-              onShowDetails={() => setShowDetailsForActivity(activity.id)}
               visibleDuration={visibleDuration}
               isStartOfVisible={isStartOfVisible}
+              onResize={(direction, newDate) => handleResize(activity, direction, newDate)}
             />
           )
         })}
