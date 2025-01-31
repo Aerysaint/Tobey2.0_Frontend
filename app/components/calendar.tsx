@@ -1,7 +1,7 @@
 "use client"
 
 import { useDrop, useDrag } from "react-dnd"
-import { addDays, format, startOfWeek, isSameDay, addHours, subDays, isWithinInterval, isAfter, isBefore, isEqual } from "date-fns"
+import { addDays, format, startOfWeek, isSameDay, addHours, subDays, isWithinInterval, isAfter, isBefore, isEqual, differenceInMinutes, startOfDay, addDays as addDaysDateFns } from "date-fns"
 import type { Activity, Plan } from "@/types"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -228,9 +228,11 @@ interface DraggableActivityProps {
   backgroundColor: string
   onRemove: () => void
   onShowDetails: () => void
+  visibleDuration: number
+  isStartOfVisible: boolean
 }
 
-function DraggableActivity({ activity, backgroundColor, onRemove, onShowDetails }: DraggableActivityProps) {
+function DraggableActivity({ activity, backgroundColor, onRemove, onShowDetails, visibleDuration, isStartOfVisible }: DraggableActivityProps) {
   const [{ isDragging }, drag] = useDrag(() => ({
     type: "CALENDAR_ACTIVITY",
     item: { ...activity, source: 'calendar' },
@@ -239,71 +241,65 @@ function DraggableActivity({ activity, backgroundColor, onRemove, onShowDetails 
     }),
   }), [activity])
 
-  // Calculate height based on duration (fromDate to toDate)
-  const getDurationHeight = () => {
-    if (!activity.fromDate || !activity.toDate) return '16px'; // Default to one 15-min slot
-
-    const start = new Date(activity.fromDate);
-    const end = new Date(activity.toDate);
-    const durationMinutes = (end.getTime() - start.getTime()) / (1000 * 60);
-    // Each 15-min slot is 16px high (h-4 class)
-    return `${(durationMinutes / 15) * 16}px`;
-  };
-
   return (
     <div
       ref={drag as any}
       className={`group absolute inset-x-1 rounded-md overflow-hidden cursor-move ${isDragging ? 'opacity-50' : ''}`}
       style={{
         top: 0,
-        height: getDurationHeight(),
+        height: `${(visibleDuration / 15) * 16}px`,
         zIndex: 10,
         backgroundColor
       }}
     >
-      <div className="relative h-full p-2 text-white">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="absolute right-1 top-1 h-6 w-6 rounded-full p-0 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/20"
-          onClick={onRemove}
-        >
-          <X className="h-3 w-3" />
-        </Button>
+      {isStartOfVisible && (
+        <div className="relative h-full p-2 text-white">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute right-1 top-1 h-6 w-6 rounded-full p-0 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/20"
+            onClick={onRemove}
+          >
+            <X className="h-3 w-3" />
+          </Button>
 
-        <div className="flex items-start gap-2">
-          <img
-            src={activity.imageList[0] || "/placeholder.svg"}
-            alt={activity.name}
-            className="h-12 w-12 rounded object-cover flex-none"
-          />
-          <div className="flex-1 min-w-0">
-            <h4 className="font-medium text-sm truncate">{activity.name}</h4>
-            <p className="text-xs text-white/90 truncate">
-              <MapPin className="inline h-3 w-3 mr-1" />
-              {activity.cityName}
-            </p>
-            <p className="text-xs text-white/75">
-              {activity.currency} {activity.price.toLocaleString()}
-            </p>
-            {/* Add time display */}
-            <p className="text-xs text-white/75 mt-1">
-              <Clock className="inline h-3 w-3 mr-1" />
-              {activity.fromDate && format(new Date(activity.fromDate), "h:mm a")} - 
-              {activity.toDate && format(new Date(activity.toDate), "h:mm a")}
-            </p>
+          <div className="flex items-start gap-2">
+            <img
+              src={activity.imageList[0] || "/placeholder.svg"}
+              alt={activity.name}
+              className="h-12 w-12 rounded object-cover flex-none"
+            />
+            <div className="flex-1 min-w-0">
+              <h4 className="font-medium text-sm truncate">{activity.name}</h4>
+              <p className="text-xs text-white/90 truncate">
+                <MapPin className="inline h-3 w-3 mr-1" />
+                {activity.cityName}
+              </p>
+              <p className="text-xs text-white/75">
+                {activity.currency} {activity.price.toLocaleString()}
+              </p>
+              {/* Add time display */}
+              <p className="text-xs text-white/75 mt-1">
+                <Clock className="inline h-3 w-3 mr-1" />
+                {activity.fromDate && format(new Date(activity.fromDate), "h:mm a")} - 
+                {activity.toDate && format(new Date(activity.toDate), "h:mm a")}
+              </p>
+            </div>
           </div>
-        </div>
 
-        <Button
-          variant="ghost"
-          className="absolute bottom-0 left-0 right-0 h-8 rounded-none bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/40 text-xs font-medium"
-          onClick={onShowDetails}
-        >
-          <Info className="h-3 w-3 mr-1.5" />
-          Show Details
-        </Button>
-      </div>
+          <Button
+            variant="ghost"
+            className="absolute bottom-0 left-0 right-0 h-8 rounded-none bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/40 text-xs font-medium"
+            onClick={onShowDetails}
+          >
+            <Info className="h-3 w-3 mr-1.5" />
+            Show Details
+          </Button>
+        </div>
+      )}
+      {!isStartOfVisible && (
+        <div className="h-full bg-black/20" />
+      )}
     </div>
   )
 }
@@ -330,50 +326,77 @@ function CalendarCell({
   groupId,
 }: CalendarCellProps) {
   const [showDetailsForActivity, setShowDetailsForActivity] = useState<string | null>(null)
+  const lastToastTime = useRef<number>(0) // Track last toast time
+
   const [{ isOver, canDrop }, drop] = useDrop(
     () => ({
       accept: ["ACTIVITY", "CALENDAR_ACTIVITY"],
       canDrop: (item: Activity & { source?: string }) => {
-        // Create the start time for the new activity
+        const originalDuration = item.fromDate && item.toDate 
+          ? differenceInMinutes(new Date(item.toDate), new Date(item.fromDate))
+          : 30;
+
         const newActivityStart = new Date(day)
         newActivityStart.setHours(hour, minute, 0, 0)
-        const newActivityEnd = addMinutes(newActivityStart, 15)
+        
+        // Allow activities to span into next day
+        const newActivityEnd = addMinutes(newActivityStart, originalDuration)
 
-        // Check if activity extends beyond midnight
-        const totalMinutes = hour * 60 + minute + 15
-        if (totalMinutes > 24 * 60) {
-          return false
-        }
-
-        // Check for overlaps with existing activities
-        const hasOverlap = activities.some(existingActivity => {
+        // Check overlaps only with activities on the same day as the start time
+        return !activities.some(existingActivity => {
           if (!existingActivity.fromDate) return false
-          if (item.source === 'calendar' && existingActivity.id === item.id) return false
+          if (item.source === 'calendar' && existingActivity.itineraryId === item.itineraryId) return false
 
           const existingStart = new Date(existingActivity.fromDate)
           const existingEnd = new Date(existingActivity.toDate)
 
-          return (
-            isSameDay(existingStart, newActivityStart) &&
-            (
-              (isAfter(newActivityStart, existingStart) && isBefore(newActivityStart, existingEnd)) ||
-              (isAfter(newActivityEnd, existingStart) && isBefore(newActivityEnd, existingEnd)) ||
-              (isBefore(newActivityStart, existingStart) && isAfter(newActivityEnd, existingEnd)) ||
-              isEqual(newActivityStart, existingStart)
-            )
-          )
-        })
-
-        return !hasOverlap
+          // Only check overlaps on the day where the activity starts
+          return isSameDay(existingStart, newActivityStart) &&
+            (isAfter(newActivityStart, existingStart) && isBefore(newActivityStart, existingEnd) ||
+            isAfter(newActivityEnd, existingStart) && isBefore(newActivityEnd, existingEnd) ||
+            isBefore(newActivityStart, existingStart) && isAfter(newActivityEnd, existingEnd) ||
+            isEqual(newActivityStart, existingStart))
+        });
       },
       drop: async (item: Activity & { source?: string }) => {
+        const now = Date.now();
+        const originalDuration = item.fromDate && item.toDate 
+          ? differenceInMinutes(new Date(item.toDate), new Date(item.fromDate))
+          : 30;
+
         const start = new Date(day)
         start.setHours(hour, minute, 0, 0)
-        const end = addMinutes(start, 30)
+        const end = addMinutes(start, originalDuration) // This can be on next day
 
+        // Check overlaps (same as canDrop but with toast)
+        const hasOverlap = activities.some(existingActivity => {
+          if (!existingActivity.fromDate) return false
+          if (item.source === 'calendar' && existingActivity.itineraryId === item.itineraryId) return false
+
+          const existingStart = new Date(existingActivity.fromDate)
+          const existingEnd = new Date(existingActivity.toDate)
+
+          // Only check overlaps on the day where the activity starts
+          return isSameDay(existingStart, start) &&
+            (isAfter(start, existingStart) && isBefore(start, existingEnd) ||
+            isAfter(end, existingStart) && isBefore(end, existingEnd) ||
+            isBefore(start, existingStart) && isAfter(end, existingEnd) ||
+            isEqual(start, existingStart))
+        })
+
+        if (hasOverlap) {
+          if (now - lastToastTime.current > 2000) {
+            toast.warning("Time slot occupied", {
+              description: "This time slot overlaps with an existing activity",
+            })
+            lastToastTime.current = now
+          }
+          return
+        }
+
+        // Proceed with drop
         try {
           if (item.source === 'calendar') {
-            // Use update endpoint for moves
             await api.get('/updateActivityInItinerary', {
               params: {
                 groupid: groupId,
@@ -383,24 +406,12 @@ function CalendarCell({
               }
             });
           } else {
-            // Use add endpoint for new activities
             await onAddActivity(item, start)
           }
-
-          toast.success(
-            item.source === 'calendar' ? "Activity Moved" : "Activity Added", 
-            {
-              description: `${item.name} has been ${item.source === 'calendar' ? 'moved to' : 'added to'} ${format(start, "MMMM do")} at ${format(start, "h:mm a")}.`,
-            }
-          )
+          toast.success("Activity updated successfully")
         } catch (error) {
-          console.error("Error handling activity:", error);
-          toast.error(
-            item.source === 'calendar' ? "Failed to move activity" : "Failed to add activity", 
-            {
-              description: "Please try again.",
-            }
-          )
+          console.error("Error updating activity:", error)
+          toast.error("Failed to update activity")
         }
       },
       collect: (monitor) => ({
@@ -408,19 +419,24 @@ function CalendarCell({
         canDrop: !!monitor.canDrop(),
       }),
     }),
-    [day, hour, minute, onAddActivity, onRemoveActivity, activities]
+    [day, hour, minute, activities, groupId, onAddActivity]
   )
 
   const cellActivities = activities.filter(activity => {
-    if (!activity.fromDate) return false
+    if (!activity.fromDate || !activity.toDate) return false
 
     const activityStart = new Date(activity.fromDate)
     const activityEnd = new Date(activity.toDate)
-    const cellStart = new Date(day)
-    cellStart.setHours(hour, minute, 0, 0)
-    const cellEnd = addMinutes(cellStart, 15)
-
-    return isWithinInterval(cellStart, { start: activityStart, end: activityEnd })
+    const cellTime = new Date(day)
+    cellTime.setHours(hour, minute, 0, 0)
+    
+    // Check if activity spans into this day
+    const dayStart = startOfDay(day)
+    const dayEnd = addDaysDateFns(dayStart, 1)
+    
+    return isWithinInterval(cellTime, { start: activityStart, end: activityEnd }) ||
+           isWithinInterval(activityStart, { start: dayStart, end: dayEnd }) ||
+           isWithinInterval(activityEnd, { start: dayStart, end: dayEnd })
   })
 
   return (
@@ -432,14 +448,24 @@ function CalendarCell({
         } ${minute === 0 ? 'border-t-2' : 'border-t-[0.5px] border-muted'}`}
       >
         {cellActivities.map(activity => {
-          if (!activity.fromDate) return null
+          if (!activity.fromDate || !activity.toDate) return null
 
           const activityStart = new Date(activity.fromDate)
-          const activityStartHour = activityStart.getHours()
-          const activityStartMinute = activityStart.getMinutes()
+          const activityEnd = new Date(activity.toDate)
+          const dayStart = startOfDay(day)
+          const dayEnd = addDaysDateFns(dayStart, 1)
+          
+          // Calculate visible portion for this day
+          const visibleStart = activityStart < dayStart ? dayStart : activityStart
+          const visibleEnd = activityEnd > dayEnd ? dayEnd : activityEnd
+          const visibleDuration = differenceInMinutes(visibleEnd, visibleStart)
+          
+          // Calculate position if this is the start of the visible portion
+          const isStartOfVisible = isEqual(visibleStart, activityStart) || 
+            isBefore(visibleStart, activityEnd)
 
-          // Check if this cell corresponds to the activity's start time
-          if (hour !== activityStartHour || minute !== activityStartMinute) return null
+          // Only render if this cell matches the visible start time
+          if (hour !== visibleStart.getHours() || minute !== visibleStart.getMinutes()) return null
 
           const backgroundColor = activityColors.get(activity.id)
 
@@ -450,6 +476,8 @@ function CalendarCell({
               backgroundColor={backgroundColor || ''}
               onRemove={() => activity.itineraryId && onRemoveActivity(activity.itineraryId)}
               onShowDetails={() => setShowDetailsForActivity(activity.id)}
+              visibleDuration={visibleDuration}
+              isStartOfVisible={isStartOfVisible}
             />
           )
         })}
