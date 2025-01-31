@@ -8,6 +8,7 @@ export interface Activity {
   imageList: string[]; // New field replacing single image
   fromDate?: string;   // For calendar activities
   toDate?: string;     // For calendar activities
+  llmDescription?: string;
 }
 
 export interface Plan {

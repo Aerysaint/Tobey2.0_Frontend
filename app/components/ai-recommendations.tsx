@@ -31,7 +31,7 @@ export function AIRecommendations({ recommendations }: AIRecommendationsProps) {
                   <Clock className="h-4 w-4 mr-1" />
                   {activity.duration} hours
                 </span>
-                <span className="font-medium">₹{activity.cost.toLocaleString()}</span>
+                <span className="font-medium">${activity.price.toLocaleString()}</span>
               </div>
             </CardContent>
           </Card>

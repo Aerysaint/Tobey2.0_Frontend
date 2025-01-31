@@ -228,10 +228,10 @@ export function GroupChatPanel({ groupId, groupName, onClose }: GroupChatPanelPr
           {messages.map((message, index) => (
             <div
               key={message.tempId || message.timestamp}
-              className={`flex flex-col max-w-[80%] ${message.user === user?.displayName ? "ml-auto items-end" : ""}`}
+              className={`flex flex-col ${message.user === user?.displayName ? "ml-auto items-end" : ""}`}
             >
               <div
-                className={`rounded-lg p-3 ${
+                className={`rounded-lg p-3 max-w-[600px] ${
                   message.user === user?.displayName
                     ? "bg-primary text-primary-foreground"
                     : "bg-muted"
@@ -240,23 +240,29 @@ export function GroupChatPanel({ groupId, groupName, onClose }: GroupChatPanelPr
                 <p className="text-sm font-medium mb-1">{message.user}</p>
                 <div className="text-sm break-words">
                   <ReactMarkdown
+                    className="prose prose-sm dark:prose-invert"
                     components={{
-                      // Override default element styling
-                      p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
-                      a: ({ href, children }) => (
-                        <a href={href} target="_blank" rel="noopener noreferrer" className="underline hover:no-underline">
+                      p: ({children}) => <p className="mb-2 last:mb-0">{children}</p>,
+                      ul: ({children}) => <ul className="mb-2 list-disc pl-4">{children}</ul>,
+                      ol: ({children}) => <ol className="mb-2 list-decimal pl-4">{children}</ol>,
+                      li: ({children}) => <li className="mb-1">{children}</li>,
+                      h1: ({children}) => <h1 className="text-lg font-bold mb-2">{children}</h1>,
+                      h2: ({children}) => <h2 className="text-md font-bold mb-2">{children}</h2>,
+                      h3: ({children}) => <h3 className="text-sm font-bold mb-2">{children}</h3>,
+                      code: ({children}) => (
+                        <code className="bg-muted-foreground/20 rounded px-1 py-0.5 overflow-x-auto">
                           {children}
-                        </a>
+                        </code>
                       ),
-                      ul: ({ children }) => <ul className="list-disc ml-4 mb-1">{children}</ul>,
-                      ol: ({ children }) => <ol className="list-decimal ml-4 mb-1">{children}</ol>,
-                      code: ({ children }) => (
-                        <code className="bg-primary/20 rounded px-1 py-0.5">{children}</code>
-                      ),
-                      pre: ({ children }) => (
-                        <pre className="bg-primary/20 rounded p-2 my-1 overflow-x-auto">
+                      pre: ({children}) => (
+                        <pre className="bg-muted-foreground/20 rounded p-2 mb-2 overflow-x-auto whitespace-pre">
                           {children}
                         </pre>
+                      ),
+                      a: ({href, children}) => (
+                        <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                          {children}
+                        </a>
                       ),
                     }}
                   >

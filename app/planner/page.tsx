@@ -19,6 +19,7 @@ import api from '@/lib/axios'
 import { doc, onSnapshot, collection, query } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import { addDays, startOfDay, isSameDay } from "date-fns"
+import { ActivityDetailsPanel } from "../components/activity-details-panel"
 
 const defaultPlan: Plan = {
   id: "default",
@@ -62,6 +63,7 @@ export default function PlannerPage() {
   const router = useRouter()
   const { user } = useAuth()
   const [isLoading, setIsLoading] = useState(true)
+  const [loadingStatus, setLoadingStatus] = useState<string>("")
   const [group, setGroup] = useState<Group | null>(null)
   const [plan, dispatch] = useReducer(planReducer, defaultPlan)
   const [isChatOpen, setIsChatOpen] = useState(false)
@@ -74,12 +76,12 @@ export default function PlannerPage() {
   const [budget, setBudget] = useState<number>(0)
   const [spent, setSpent] = useState<number>(0)
   const [activities, setActivities] = useState<Activity[]>([])
+  const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null)
 
   // Check session and access
   useEffect(() => {
     const checkAccess = async () => {
       try {
-        // Check session first
         const sessionResponse = await api.get("/authenticateSession");
         if (!sessionResponse.data.session) {
           console.log("No valid session found, redirecting to home");
@@ -89,25 +91,31 @@ export default function PlannerPage() {
 
         const groupId = searchParams.get("group");
         const isAIChat = searchParams.get("chat") === "ai";
-        console.log("Planner: Access check params:", { groupId, isAIChat });
 
         // For AI chat without group, set loading false immediately
         if (!groupId && isAIChat) {
-          console.log("Planner: AI chat without group, allowing access");
           setIsLoading(false);
           return;
         }
 
         // Allow access without group ID if AI chat is requested
         if (!groupId && !isAIChat) {
-          console.log("Planner: No group and no AI chat, redirecting to home");
           router.replace("/home");
           return;
         }
 
         if (groupId) {
-          console.log("Planner: Checking group access for:", groupId);
           try {
+            // Set up status listener
+            const unsubscribe = onSnapshot(doc(db, 'sessions', groupId), (doc) => {
+              if (doc.exists()) {
+                const status = doc.data().status || "";
+                setLoadingStatus(status);
+                // Only set loading to false when status is 'Done'
+                setIsLoading(status !== "Done");
+              }
+            });
+
             const groupResponse = await api.get(`/getGroupName?groupId=${groupId}`);
             const memberCountResponse = await api.get(`/getGroupMemberCount?groupId=${groupId}`);
 
@@ -117,17 +125,17 @@ export default function PlannerPage() {
               memberCount: memberCountResponse.data.count
             };
 
-            console.log("Planner: Group access granted:", groupData);
             setGroup(groupData);
             setCurrentGroup(groupData);
+
+            // Return cleanup function
+            return () => unsubscribe();
           } catch (error) {
             console.error("Planner: Error checking group access:", error);
             toast.error("Failed to load group");
             router.replace("/home");
-            return;
           }
         }
-        setIsLoading(false);
       } catch (error) {
         console.error("Error checking access:", error);
         toast.error("Failed to verify access");
@@ -416,20 +424,12 @@ export default function PlannerPage() {
   }, [currentGroup])
 
   if (isLoading) {
-    console.log("Planner: Loading state check", {
-      isLoading,
-      isAIChat: searchParams.get("chat") === "ai",
-      hasGroup: !!group
-    });
-
-    // Only show loading spinner if we're not in AI chat mode
-    if (!searchParams.get("chat")) {
-      return (
-        <div className="min-h-screen flex items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-        </div>
-      );
-    }
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-gray-400 mb-4" />
+        <p className="text-gray-600">{loadingStatus}</p>
+      </div>
+    );
   }
 
   return (
@@ -484,7 +484,7 @@ export default function PlannerPage() {
                   plan={currentGroup?.plan || defaultPlan}
                   onAddActivity={handleAddActivity}
                   onRemoveActivity={handleRemoveActivity}
-                  groupId={searchParams.get("group") || ""}
+                  groupId={currentGroup?.id || ""}
                   activities={activities}
                   getDayBudget={getDayBudget}
                 />
@@ -509,6 +509,13 @@ export default function PlannerPage() {
             onCreateGroup={handleCreateGroup}
           />
         </div>
+        {selectedActivity && (
+          <ActivityDetailsPanel
+            activity={selectedActivity}
+            groupId={currentGroup?.id || ""}
+            onClose={() => setSelectedActivity(null)}
+          />
+        )}
       </div>
     </DndProvider>
   )

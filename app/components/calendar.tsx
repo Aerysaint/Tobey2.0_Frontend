@@ -49,7 +49,7 @@ export function Calendar({ plan, groupId, activities, getDayBudget }: CalendarPr
           currency: data.Currency,
           imageList: data.ImageList || [],
           fromDate: data.FromDate,
-          toDate: data.ToDate
+          toDate: data.ToDate,
         });
       });
 
@@ -172,7 +172,7 @@ export function Calendar({ plan, groupId, activities, getDayBudget }: CalendarPr
               <div key={day.toISOString()} className="text-center p-2">
                 <div className="font-medium">{format(day, "EEE")}</div>
                 <div className="text-2xl">{format(day, "d")}</div>
-                <div className="text-xs text-muted-foreground">₹{getDayBudget(day).toLocaleString()} spent</div>
+                <div className="text-xs text-muted-foreground">${getDayBudget(day).toLocaleString()} spent</div>
               </div>
             ))}
           </div>
@@ -231,6 +231,7 @@ interface DraggableActivityProps {
   visibleDuration: number
   isStartOfVisible: boolean
   onResize: (direction: 'top' | 'bottom', newDate: Date) => Promise<void>
+  groupId: string
 }
 
 function DraggableActivity({ 
@@ -239,7 +240,8 @@ function DraggableActivity({
   onRemove, 
   visibleDuration, 
   isStartOfVisible,
-  onResize 
+  onResize,
+  groupId
 }: DraggableActivityProps) {
   const [isResizing, setIsResizing] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
@@ -383,6 +385,7 @@ function DraggableActivity({
       {showDetails && (
         <ActivityDetailsPanel
           activity={activity}
+          groupId={groupId}
           onClose={() => setShowDetails(false)}
         />
       )}
@@ -609,6 +612,7 @@ function CalendarCell({
               visibleDuration={visibleDuration}
               isStartOfVisible={isStartOfVisible}
               onResize={(direction, newDate) => handleResize(activity, direction, newDate)}
+              groupId={groupId}
             />
           )
         })}
@@ -617,6 +621,7 @@ function CalendarCell({
       {showDetailsForActivity && (
         <ActivityDetailsPanel
           activity={activities.find(a => a.id === showDetailsForActivity)!}
+          groupId={groupId}
           onClose={() => setShowDetailsForActivity(null)}
         />
       )}

@@ -5,6 +5,7 @@ import type { Plan } from "@/types"
 import { useState, useEffect } from "react"
 import { toast, Toaster } from "sonner"
 import { Input } from "@/components/ui/input"
+import { cn } from "@/lib/utils"
 
 interface HeaderProps {
   budget: number
@@ -25,11 +26,21 @@ export function Header({
 }: HeaderProps) {
   const [isEditingBudget, setIsEditingBudget] = useState(false)
   const [tempBudget, setTempBudget] = useState(budget.toString())
+  const remaining = Number((budget - spent).toFixed(2));
+  const isOverBudget = remaining < 0;
 
   // Update tempBudget when budget prop changes
   useEffect(() => {
     setTempBudget(budget.toString());
   }, [budget]);
+
+  useEffect(() => {
+    if (isOverBudget) {
+      toast.error("Over Budget!", {
+        description: `You have exceeded your budget by $${Math.abs(remaining).toFixed(2)}`,
+      });
+    }
+  }, [isOverBudget, remaining]);
 
   const handleBudgetSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -90,17 +101,22 @@ export function Header({
                 className="text-sm"
                 onClick={() => setIsEditingBudget(true)}
               >
-                ₹{budget.toLocaleString()}
+                ${budget.toLocaleString()}
               </Button>
             )}
           </div>
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Spent:</span>
-            <span className="text-sm">₹{spent.toLocaleString()}</span>
+            <span className="text-sm">${spent.toLocaleString()}</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Remaining:</span>
-            <span className="text-sm">₹{(budget - spent).toLocaleString()}</span>
+            <span className={cn(
+              "font-medium",
+              isOverBudget && "text-destructive font-bold"
+            )}>
+              ${remaining.toFixed(2)}
+            </span>
           </div>
         </div>
       </div>

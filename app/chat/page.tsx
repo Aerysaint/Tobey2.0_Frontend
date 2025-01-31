@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Bot, Send, ArrowLeft } from "lucide-react";
+import { Bot, Send, ArrowLeft, Loader2 } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,8 @@ export default function ChatPage() {
     const [input, setInput] = useState("");
     const [isTyping, setIsTyping] = useState(false);
     const [showInput, setShowInput] = useState(true);
+    const [isLoading, setIsLoading] = useState(true);
+    const [loadingStatus, setLoadingStatus] = useState("Loading...");
     const scrollAreaRef = useRef<HTMLDivElement>(null);
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -73,6 +75,9 @@ export default function ChatPage() {
             setMessages(newMessages);
             setIsTyping(false);
             scrollToBottom();
+            setTimeout(() => {
+                setIsLoading(false);
+            }, 500);
         });
 
         return () => unsubscribe();
@@ -85,6 +90,27 @@ export default function ChatPage() {
             setIsTyping(lastMessage.sender.role === 'customer');
         }
     }, [messages]);
+
+    // Add new effect to fetch status
+    useEffect(() => {
+        if (!groupId) return;
+
+        const sessionDoc = doc(db, 'sessions', groupId);
+        const unsubscribe = onSnapshot(sessionDoc, (doc) => {
+            if (doc.exists()) {
+                const status = doc.data().status || "Loading...";
+                setLoadingStatus('Loading...');
+                
+                // Redirect if status is not "Loading conversation..."
+                if (status !== "Chatting") {
+                    setLoadingStatus('Chat finished sending to planner...');
+                    router.push(`/planner?group=${groupId}`);
+                }
+            }
+        });
+
+        return () => unsubscribe();
+    }, [groupId, router]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -118,12 +144,12 @@ export default function ChatPage() {
             const aiResponse = await api.get(
                 `/updateNextInitial?sessionid=${groupId}`
             );
-
-            // Check if chat is finished
-            if (aiResponse.data?.status === 'chat finished') {
-                toast.success("Planning completed! Redirecting to planner...");
+            if (aiResponse.status !== 200) {
+                throw new Error("Failed to trigger AI response");
+            }
+            if (aiResponse.data.status === 'chat finished') {
+                setLoadingStatus('Chat finished sending to planner...');
                 router.push(`/planner?group=${groupId}`);
-                return;
             }
         } catch (error) {
             console.error("Error sending message:", error);
@@ -132,6 +158,16 @@ export default function ChatPage() {
             setIsTyping(false);
         }
     };
+
+    // Modified loading state
+    if (isLoading) {
+        return (
+            <div className="h-screen flex flex-col items-center justify-center bg-background">
+                <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+                <p className="text-muted-foreground">{loadingStatus}</p>
+            </div>
+        );
+    }
 
     return (
         <div className="h-screen flex flex-col bg-background">
@@ -172,7 +208,6 @@ export default function ChatPage() {
                                         <ReactMarkdown 
                                             className="prose prose-sm dark:prose-invert max-w-none"
                                             components={{
-                                                // Override default element styling
                                                 p: ({children}) => <p className="mb-2 last:mb-0">{children}</p>,
                                                 ul: ({children}) => <ul className="mb-2 list-disc pl-4">{children}</ul>,
                                                 ol: ({children}) => <ol className="mb-2 list-decimal pl-4">{children}</ol>,
@@ -187,6 +222,11 @@ export default function ChatPage() {
                                                     <pre className="bg-muted-foreground/20 rounded p-2 mb-2 overflow-x-auto">
                                                         {children}
                                                     </pre>
+                                                ),
+                                                a: ({href, children}) => (
+                                                    <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                                                        {children}
+                                                    </a>
                                                 ),
                                             }}
                                         >

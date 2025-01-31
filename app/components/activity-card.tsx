@@ -11,9 +11,11 @@ import { ActivityDetailsPanel } from "./activity-details-panel"
 interface ActivityCardProps {
   activity: Activity
   onRemove?: () => void
+  groupId: string
 }
 
-export function ActivityCard({ activity, onRemove }: ActivityCardProps) {
+export function ActivityCard({ activity, onRemove, groupId }: ActivityCardProps) {
+  console.log("ActivityCard", activity, groupId)
   const [showDetails, setShowDetails] = useState(false)
   const [{ isDragging }, dragRef] = useDrag({
     type: "ACTIVITY",
@@ -73,6 +75,7 @@ export function ActivityCard({ activity, onRemove }: ActivityCardProps) {
       {showDetails && (
         <ActivityDetailsPanel
           activity={activity}
+          groupId={groupId}
           onClose={() => setShowDetails(false)}
         />
       )}
