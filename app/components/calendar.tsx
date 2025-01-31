@@ -26,7 +26,7 @@ interface CalendarProps {
 export function Calendar({ plan, groupId, activities, getDayBudget }: CalendarProps) {
   const [startDate, setStartDate] = useState(startOfWeek(new Date()))
   const days = Array.from({ length: 7 }, (_, i) => addDays(startDate, i))
-  const hours = Array.from({ length: 24 }, (_, i) => i)
+  const hours = Array.from({ length: 25 }, (_, i) => i)
   const quarterHours = [0, 15, 30, 45] // 15-minute intervals
   const colorMapRef = useRef(new Map<string, string>())
 
@@ -404,6 +404,14 @@ interface CalendarCellProps {
   groupId: string
 }
 
+const roundToNearestQuarter = (date: Date) => {
+  const minutes = date.getMinutes();
+  const roundedMinutes = Math.round(minutes / 15) * 15;
+  const newDate = new Date(date);
+  newDate.setMinutes(roundedMinutes, 0, 0);
+  return newDate;
+};
+
 function CalendarCell({
   day,
   hour,
@@ -425,11 +433,10 @@ function CalendarCell({
           ? differenceInMinutes(new Date(item.toDate), new Date(item.fromDate))
           : 30;
 
-        const newActivityStart = new Date(day)
+        const newActivityStart = roundToNearestQuarter(new Date(day))
         newActivityStart.setHours(hour, minute, 0, 0)
         
-        // Allow activities to span into next day
-        const newActivityEnd = addMinutes(newActivityStart, originalDuration)
+        const newActivityEnd = roundToNearestQuarter(addMinutes(newActivityStart, originalDuration))
 
         // Check overlaps only with activities on the same day as the start time
         return !activities.some(existingActivity => {
@@ -453,9 +460,9 @@ function CalendarCell({
           ? differenceInMinutes(new Date(item.toDate), new Date(item.fromDate))
           : 30;
 
-        const start = new Date(day)
+        const start = roundToNearestQuarter(new Date(day))
         start.setHours(hour, minute, 0, 0)
-        const end = addMinutes(start, originalDuration) // This can be on next day
+        const end = roundToNearestQuarter(addMinutes(start, originalDuration))
 
         // Check overlaps (same as canDrop but with toast)
         const hasOverlap = activities.some(existingActivity => {
@@ -514,8 +521,8 @@ function CalendarCell({
   const cellActivities = activities.filter(activity => {
     if (!activity.fromDate || !activity.toDate) return false
 
-    const activityStart = new Date(activity.fromDate)
-    const activityEnd = new Date(activity.toDate)
+    const activityStart = roundToNearestQuarter(new Date(activity.fromDate))
+    const activityEnd = roundToNearestQuarter(new Date(activity.toDate))
     const cellTime = new Date(day)
     cellTime.setHours(hour, minute, 0, 0)
     
@@ -530,8 +537,9 @@ function CalendarCell({
 
   const handleResize = async (activity: Activity, direction: 'top' | 'bottom', newDate: Date) => {
     try {
-      const fromDate = direction === 'top' ? newDate : new Date(activity.fromDate);
-      const toDate = direction === 'bottom' ? newDate : new Date(activity.toDate);
+      const roundedNewDate = roundToNearestQuarter(newDate);
+      const fromDate = direction === 'top' ? roundedNewDate : roundToNearestQuarter(new Date(activity.fromDate));
+      const toDate = direction === 'bottom' ? roundedNewDate : roundToNearestQuarter(new Date(activity.toDate));
 
       // Validate the new times
       if (fromDate >= toDate) {
@@ -584,8 +592,8 @@ function CalendarCell({
         {cellActivities.map(activity => {
           if (!activity.fromDate || !activity.toDate) return null
 
-          const activityStart = new Date(activity.fromDate)
-          const activityEnd = new Date(activity.toDate)
+          const activityStart = roundToNearestQuarter(new Date(activity.fromDate))
+          const activityEnd = roundToNearestQuarter(new Date(activity.toDate))
           const dayStart = startOfDay(day)
           const dayEnd = addDaysDateFns(dayStart, 1)
           
