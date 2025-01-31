@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { ActivityCard } from "./activity-card"
 import type { Plan, Activity } from "@/types"
-import { groupsApi } from "@/services/groupsApi"
 import { toast } from "sonner"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
@@ -18,14 +17,12 @@ import { format } from "date-fns"
 interface SidebarProps {
   plan: Plan
   onToggleGroupChats: () => void
-  onAddActivity: (activity: Activity, startTime: Date) => Promise<void>
   currentGroupId?: string | null
 }
 
 export function Sidebar({
   plan,
   onToggleGroupChats,
-  onAddActivity,
   currentGroupId,
 }: SidebarProps) {
   const [searchQuery, setSearchQuery] = useState("")

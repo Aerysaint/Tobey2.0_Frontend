@@ -17,13 +17,12 @@ import api from '@/lib/axios';
 import { format as formatDate, addMinutes } from "date-fns";
 
 interface CalendarProps {
-  plan: Plan
   groupId: string
   activities: Activity[]
   getDayBudget: (day: Date) => number
 }
 
-export function Calendar({ plan, groupId, activities, getDayBudget }: CalendarProps) {
+export function Calendar({groupId, activities, getDayBudget }: CalendarProps) {
   const [startDate, setStartDate] = useState(startOfWeek(new Date()))
   const days = Array.from({ length: 7 }, (_, i) => addDays(startDate, i))
   const hours = Array.from({ length: 25 }, (_, i) => i)

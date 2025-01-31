@@ -6,7 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
-import { groupsApi } from "@/services/groupsApi";
 import { toast, Toaster } from "sonner";
 import { RecentGroups } from "../components/recent-groups";
 import { useAuth } from "@/app/contexts/auth-context";

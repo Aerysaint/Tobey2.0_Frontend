@@ -10,7 +10,6 @@ import { Header } from "../components/header"
 import type { Plan, Activity, ChatMessage } from "@/types"
 import { AIAssistantChat } from "../components/ai-assistant-chat"
 import { toast, Toaster } from "sonner"
-import { groupsApi } from "@/services/groupsApi"
 import { Group } from "@/types"
 import { GroupChatPanel } from "../components/group-chat-panel"
 import { useAuth } from "@/app/contexts/auth-context"
@@ -156,21 +155,6 @@ export default function PlannerPage() {
     }
   }, [searchParams]);
 
-  // Set up real-time listener for current group
-  useEffect(() => {
-    const groupId = currentGroup?.id
-    if (!groupId) return
-
-    const unsubscribe = groupsApi.subscribeToGroup(groupId, (updatedGroup) => {
-      if (isUpdating) return // Skip updates while we're handling a local change
-      setCurrentGroup(updatedGroup)
-    })
-
-    return () => {
-      unsubscribe()
-    }
-  }, [currentGroup?.id, isUpdating])
-
   // Subscribe to budget changes in Firestore
   useEffect(() => {
     if (!currentGroup?.id) return;
@@ -294,134 +278,9 @@ export default function PlannerPage() {
     [currentGroup]
   );
 
-  const handleToggleChat = useCallback(() => {
-    setIsChatOpen((prev) => !prev)
-  }, [])
-
-  const handleAddActivity = async (activity: Activity, startTime: Date) => {
-    if (!currentGroup) return
-
-    const existingActivity = await groupsApi.getActivity(activity.id)
-    if (!existingActivity) {
-      toast.error("Activity not found")
-      return
-    }
-
-    // Ensure plan and its arrays exist
-    const currentPlan = currentGroup.plan || { ...defaultPlan }
-    const currentActivities = currentPlan.activities || []
-    const currentActivityIds = currentPlan.activityIds || []
-
-    const isMovingActivity = currentActivityIds.includes(activity.id)
-    const activityWithStartTime = { ...existingActivity, startTime }
-
-    const updatedGroup = {
-      ...currentGroup,
-      plan: {
-        ...currentPlan,
-        activities: isMovingActivity
-          ? currentActivities.map(a => a.id === activity.id ? activityWithStartTime : a)
-          : [...currentActivities, activityWithStartTime],
-        activityIds: isMovingActivity
-          ? currentActivityIds
-          : [...currentActivityIds, activity.id],
-        spent: (currentPlan.spent || 0) + (isMovingActivity ? 0 : (existingActivity.cost || 0)),
-      },
-    }
-
-    try {
-      setIsUpdating(true)
-      // Update local state immediately
-      setCurrentGroup(updatedGroup)
-      // Then sync with Firebase
-      await groupsApi.updateGroup(updatedGroup)
-    } catch (error) {
-      console.error("Error updating activity:", error)
-      toast.error("Failed to update activity")
-      // Revert local state on error
-      setCurrentGroup(currentGroup)
-    } finally {
-      setIsUpdating(false)
-    }
-  }
-
-  const handleRemoveActivity = useCallback(
-    async (activityId: string) => {
-      if (!currentGroup) {
-        toast.error("No group selected")
-        return
-      }
-
-      try {
-        const activity = await groupsApi.getActivity(activityId)
-        if (!activity) {
-          toast.error("Activity not found")
-          return
-        }
-
-        const updatedGroup = {
-          ...currentGroup,
-          plan: {
-            ...currentGroup.plan,
-            activityIds: currentGroup.plan.activityIds.filter((id: string) => id !== activityId),
-            activities: currentGroup.plan.activities.filter((a: Activity) => a.id !== activityId),
-            spent: Math.max(0, currentGroup.plan.spent - (activity.cost || 0))
-          }
-        }
-
-        setIsUpdating(true)
-        // Update local state immediately
-        setCurrentGroup(updatedGroup)
-        // Then sync with Firebase
-        await groupsApi.updateGroup(updatedGroup)
-      } catch (error) {
-        console.error("Error removing activity:", error)
-        toast.error("Failed to remove activity")
-        // Revert local state on error
-        setCurrentGroup(currentGroup)
-      } finally {
-        setIsUpdating(false)
-      }
-    },
-    [currentGroup]
-  )
-
   const handleToggleGroupChats = useCallback(() => {
     setShowGroupChat((prev) => !prev)
   }, [])
-
-  const handleOpenCalendar = useCallback((groupId: string) => {
-    setShowCalendar(true)
-    setShowGroupChat(false)
-  }, [])
-
-  const handleClearAllNodes = useCallback(async () => {
-    if (!currentGroup) {
-      toast.error("No group selected")
-      return
-    }
-
-    try {
-      const updatedGroup = {
-        ...currentGroup,
-        plan: {
-          ...currentGroup.plan,
-          activityIds: [],
-          activities: [],
-          spent: 0
-        }
-      }
-
-      await groupsApi.updateGroup(updatedGroup)
-      setCurrentGroup(updatedGroup)
-      toast.success("All activities cleared", {
-        description: "Your plan has been reset."
-      })
-    } catch (error) {
-      console.error("Error clearing activities:", error)
-      toast.error("Failed to clear activities")
-    }
-  }, [currentGroup])
 
   if (isLoading) {
     return (
@@ -467,7 +326,6 @@ export default function PlannerPage() {
               })
             }
           }}
-          onClearAllNodes={handleClearAllNodes}
           onToggleGroupChats={handleToggleGroupChats}
         />
         <div className="flex flex-1 overflow-hidden">
@@ -476,14 +334,10 @@ export default function PlannerPage() {
               <Sidebar
                 plan={currentGroup?.plan || defaultPlan}
                 onToggleGroupChats={handleToggleGroupChats}
-                onAddActivity={handleAddActivity}
                 currentGroupId={currentGroup?.id || ""}
               />
               <div className="flex-1 overflow-hidden">
                 <Calendar
-                  plan={currentGroup?.plan || defaultPlan}
-                  onAddActivity={handleAddActivity}
-                  onRemoveActivity={handleRemoveActivity}
                   groupId={currentGroup?.id || ""}
                   activities={activities}
                   getDayBudget={getDayBudget}
