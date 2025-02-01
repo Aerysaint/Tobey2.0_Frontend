@@ -16,6 +16,15 @@ import { db } from "@/lib/firebase";
 import { collection, doc, onSnapshot, orderBy, query } from "firebase/firestore";
 import ReactMarkdown from 'react-markdown';
 
+// Add a list of travel-related YouTube video IDs
+const travelVideoIds = [
+    "hBPvK-FPXQw", // Beautiful travel destinations
+    "8sR-_8S6jCQ", // World's most scenic places
+    "AlRxDl3BKr0", // Amazing places around the world
+    "eAXmXXvxKi0", // Travel inspiration
+    "K1QICrgxTjA"  // Breathtaking landscapes
+];
+
 export default function ChatPage() {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [input, setInput] = useState("");
@@ -28,6 +37,9 @@ export default function ChatPage() {
     const searchParams = useSearchParams();
     const { user } = useAuth();
     const groupId = searchParams.get('group');
+
+    // Add state for random video
+    const [videoId, setVideoId] = useState("");
 
     // Auto-scroll to the latest message
     useEffect(() => {
@@ -57,21 +69,21 @@ export default function ChatPage() {
 
         const sessionDoc = doc(db, 'sessions', groupId);
         const messagesCollection = collection(sessionDoc, 'first chat');
-        
+
         const unsubscribe = onSnapshot(messagesCollection, (snapshot) => {
             const newMessages = snapshot.docs.map(doc => {
                 const data = doc.data();
                 return {
                     id: doc.id,
                     content: data.parts[0].text,
-                    sender: { 
+                    sender: {
                         id: data.role === 'model' ? 'ai' : 'user',
                         name: data.role === 'model' ? 'AI Assistant' : 'You',
                         role: data.role === 'model' ? 'ai' : 'customer'
                     }
                 } as ChatMessage;
             });
-            
+
             setMessages(newMessages);
             setIsTyping(false);
             scrollToBottom();
@@ -100,7 +112,7 @@ export default function ChatPage() {
             if (doc.exists()) {
                 const status = doc.data().status || "Loading...";
                 setLoadingStatus('Loading...');
-                
+
                 // Redirect if status is not "Loading conversation..."
                 if (status !== "Chatting") {
                     setLoadingStatus('Chat finished sending to planner...');
@@ -112,6 +124,12 @@ export default function ChatPage() {
         return () => unsubscribe();
     }, [groupId, router]);
 
+    // Select random video on mount
+    useEffect(() => {
+        const randomIndex = Math.floor(Math.random() * travelVideoIds.length);
+        setVideoId(travelVideoIds[randomIndex]);
+    }, []);
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!input.trim() || !groupId) return;
@@ -119,7 +137,7 @@ export default function ChatPage() {
         const tempMessage: ChatMessage = {
             id: Date.now().toString(),
             content: input.trim(),
-            sender: { 
+            sender: {
                 id: 'user',
                 name: 'You',
                 role: 'customer'
@@ -200,30 +218,30 @@ export default function ChatPage() {
                                 </Avatar>
                                 <div
                                     className={`rounded-lg p-3 ${message.sender.role === "customer"
-                                            ? "bg-primary text-primary-foreground"
-                                            : "bg-muted"
+                                        ? "bg-primary text-primary-foreground"
+                                        : "bg-muted"
                                         }`}
                                 >
                                     {message.sender.role === "ai" ? (
-                                        <ReactMarkdown 
+                                        <ReactMarkdown
                                             className="prose prose-sm dark:prose-invert max-w-none"
                                             components={{
-                                                p: ({children}) => <p className="mb-2 last:mb-0">{children}</p>,
-                                                ul: ({children}) => <ul className="mb-2 list-disc pl-4">{children}</ul>,
-                                                ol: ({children}) => <ol className="mb-2 list-decimal pl-4">{children}</ol>,
-                                                li: ({children}) => <li className="mb-1">{children}</li>,
-                                                h1: ({children}) => <h1 className="text-lg font-bold mb-2">{children}</h1>,
-                                                h2: ({children}) => <h2 className="text-md font-bold mb-2">{children}</h2>,
-                                                h3: ({children}) => <h3 className="text-sm font-bold mb-2">{children}</h3>,
-                                                code: ({children}) => (
+                                                p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                                                ul: ({ children }) => <ul className="mb-2 list-disc pl-4">{children}</ul>,
+                                                ol: ({ children }) => <ol className="mb-2 list-decimal pl-4">{children}</ol>,
+                                                li: ({ children }) => <li className="mb-1">{children}</li>,
+                                                h1: ({ children }) => <h1 className="text-lg font-bold mb-2">{children}</h1>,
+                                                h2: ({ children }) => <h2 className="text-md font-bold mb-2">{children}</h2>,
+                                                h3: ({ children }) => <h3 className="text-sm font-bold mb-2">{children}</h3>,
+                                                code: ({ children }) => (
                                                     <code className="bg-muted-foreground/20 rounded px-1 py-0.5">{children}</code>
                                                 ),
-                                                pre: ({children}) => (
+                                                pre: ({ children }) => (
                                                     <pre className="bg-muted-foreground/20 rounded p-2 mb-2 overflow-x-auto">
                                                         {children}
                                                     </pre>
                                                 ),
-                                                a: ({href, children}) => (
+                                                a: ({ href, children }) => (
                                                     <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
                                                         {children}
                                                     </a>

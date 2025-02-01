@@ -57,6 +57,11 @@ function planReducer(state: Plan, action: Action): Plan {
   }
 }
 
+// Add travel video IDs - using YouTube's demo video
+const travelVideoIds = [
+  "M7lc1UVf-VE"  // YouTube official demo video
+];
+
 export default function PlannerPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -64,6 +69,7 @@ export default function PlannerPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [loadingStatus, setLoadingStatus] = useState<string>("")
   const [group, setGroup] = useState<Group | null>(null)
+  const [activities, setActivities] = useState<Activity[]>([])
   const [plan, dispatch] = useReducer(planReducer, defaultPlan)
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [showGroupChat, setShowGroupChat] = useState(false)
@@ -74,8 +80,8 @@ export default function PlannerPage() {
   const [isUpdating, setIsUpdating] = useState(false)
   const [budget, setBudget] = useState<number>(0)
   const [spent, setSpent] = useState<number>(0)
-  const [activities, setActivities] = useState<Activity[]>([])
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null)
+  const [videoId, setVideoId] = useState("");
 
   // Check session and access
   useEffect(() => {
@@ -160,7 +166,7 @@ export default function PlannerPage() {
     if (!currentGroup?.id) return;
 
     const groupDoc = doc(db, 'sessions', currentGroup.id);
-    
+
     const unsubscribe = onSnapshot(groupDoc, (doc) => {
       if (doc.exists()) {
         const data = doc.data();
@@ -178,11 +184,11 @@ export default function PlannerPage() {
     if (!currentGroup?.id) return;
 
     const itineraryRef = collection(db, 'sessions', currentGroup.id, 'itinerary');
-    
+
     const unsubscribe = onSnapshot(query(itineraryRef), (snapshot) => {
       const updatedActivities: Activity[] = [];
       let totalSpent = 0;
-      
+
       snapshot.forEach((doc) => {
         const data = doc.data();
         const activity = {
@@ -266,7 +272,7 @@ export default function PlannerPage() {
             budget: amount
           }
         });
-        
+
         toast.success("Budget Updated", {
           description: `Budget has been set to ₹${amount}`,
         });
@@ -282,11 +288,42 @@ export default function PlannerPage() {
     setShowGroupChat((prev) => !prev)
   }, [])
 
+  // Select random video on mount
+  useEffect(() => {
+    const randomIndex = Math.floor(Math.random() * travelVideoIds.length);
+    setVideoId(travelVideoIds[randomIndex]);
+  }, []);
+
+  // Modified loading state
   if (isLoading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-gray-400 mb-4" />
-        <p className="text-gray-600">{loadingStatus}</p>
+      <div className="h-screen flex flex-col items-center justify-center bg-background p-8">
+        <div className="max-w-4xl w-full space-y-8">
+          <div className="text-center space-y-4">
+            <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
+            <p className="text-xl font-medium">{loadingStatus}</p>
+            <p className="text-muted-foreground">Watch this travel video while we create your perfect itinerary</p>
+          </div>
+
+          <div className="aspect-video w-full rounded-lg overflow-hidden shadow-lg">
+            <iframe
+              width="100%"
+              height="100%"
+              src={`https://www.youtube.com/embed/${videoId}?autoplay=1&mute=0&rel=0&modestbranding=1&origin=${typeof window !== 'undefined' ? window.location.origin : ''}`}
+              title="Travel Video"
+              frameBorder="0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+              className="w-full h-full"
+              onError={() => {
+                // If current video fails, try the next one
+                const currentIndex = travelVideoIds.indexOf(videoId);
+                const nextIndex = (currentIndex + 1) % travelVideoIds.length;
+                setVideoId(travelVideoIds[nextIndex]);
+              }}
+            />
+          </div>
+        </div>
       </div>
     );
   }
@@ -340,6 +377,7 @@ export default function PlannerPage() {
                 <Calendar
                   groupId={currentGroup?.id || ""}
                   activities={activities}
+                  setActivities={setActivities}
                   getDayBudget={getDayBudget}
                 />
               </div>

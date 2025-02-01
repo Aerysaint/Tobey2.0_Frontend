@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Loader2, LogOut, User } from "lucide-react";
+import { ArrowRight, Loader2, LogOut, User, MessageSquare, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -21,6 +21,22 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import api from '@/lib/axios';
+
+// Featured destinations for the hero section
+const featuredDestinations = [
+  {
+    image: "https://images.unsplash.com/photo-1506197603052-3cc9c3a201bd?q=80&w=2070&auto=format&fit=crop",
+    title: "Scenic Mountains"
+  },
+  {
+    image: "https://images.unsplash.com/photo-1495344517868-8ebaf0a2044a?q=80&w=2006&auto=format&fit=crop",
+    title: "Coastal Paradise"
+  },
+  {
+    image: "https://images.unsplash.com/photo-1486870591958-9b9d0d1dda99?q=80&w=2070&auto=format&fit=crop",
+    title: "Urban Adventure"
+  }
+];
 
 export default function HomePage() {
   const router = useRouter();
@@ -65,7 +81,7 @@ export default function HomePage() {
     setIsLoading(true);
     try {
       const response = await api.get("/createGroup");
-      
+
       if (response.status !== 200) {
         throw new Error("Failed to create group");
       }
@@ -104,10 +120,10 @@ export default function HomePage() {
     try {
       // Sign out from backend first
       await api.get('/signOut');
-      
+
       // Then sign out from Firebase
       await signOut(auth);
-      
+
       // Redirect to login page
       router.push('/');
     } catch (error) {
@@ -132,9 +148,12 @@ export default function HomePage() {
       <Toaster richColors position="top-center" />
 
       {/* Header with user profile */}
-      <header className="border-b">
+      <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Travel Planner</h1>
+          <h1 className="text-2xl font-bold font-montserrat">
+            <span className="text-blue-500">To</span>
+            <span className="text-[#FF7E5F]">bey</span>
+          </h1>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -172,31 +191,51 @@ export default function HomePage() {
         </div>
       </header>
 
+      {/* Hero Section */}
+      <div className="bg-gradient-to-b from-white to-gray-50 py-12">
+        <div className="container mx-auto px-4">
+          <h2 className="text-4xl font-bold text-center mb-6">
+            Welcome back, {user.displayName?.split(' ')[0]}!
+          </h2>
+          <p className="text-lg text-center text-gray-600 mb-12">
+            Ready to plan your next adventure?
+          </p>
+        </div>
+      </div>
+
       {/* Main content */}
       <main className="container mx-auto px-4 py-8">
-        <h2 className="text-xl font-semibold mb-4">Welcome, {user.displayName}!</h2>
         <div className="relative max-w-4xl mx-auto">
           <div className="absolute left-0 -translate-x-[calc(100%+2rem)] top-0 hidden xl:block">
             <RecentGroups />
           </div>
 
           <div className="grid md:grid-cols-2 gap-6">
-            <Card className="relative overflow-hidden">
-              <CardHeader>
-                <CardTitle>Join a Group</CardTitle>
+            <Card className="relative overflow-hidden group hover:shadow-lg transition-all duration-300">
+              <div className="absolute inset-0 bg-gradient-to-r from-[#FF9F87]/10 to-[#FF7E5F]/10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+              <CardHeader className="relative z-10">
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5 text-[#FF7E5F]" />
+                  Join a Group
+                </CardTitle>
                 <CardDescription>
                   Enter the group code shared by your travel companions
                 </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="relative z-10">
                 <div className="flex gap-2">
                   <Input
                     placeholder="Enter group code"
                     value={groupId}
                     onChange={(e) => setGroupId(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleJoinGroup()}
+                    className="border-gray-200 focus:border-[#FF7E5F] transition-colors"
                   />
-                  <Button onClick={handleJoinGroup} disabled={isLoading || !groupId.trim()}>
+                  <Button
+                    onClick={handleJoinGroup}
+                    disabled={isLoading || !groupId.trim()}
+                    className="bg-[#FF7E5F] hover:bg-[#FF7E5F]/90 text-white"
+                  >
                     {isLoading ? (
                       <Loader2 className="h-4 w-4 animate-spin mr-2" />
                     ) : (
@@ -208,15 +247,23 @@ export default function HomePage() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Create a New Group</CardTitle>
+            <Card className="relative overflow-hidden group hover:shadow-lg transition-all duration-300">
+              <div className="absolute inset-0 bg-gradient-to-r from-[#FF9F87]/10 to-[#FF7E5F]/10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+              <CardHeader className="relative z-10">
+                <CardTitle className="flex items-center gap-2">
+                  <MessageSquare className="h-5 w-5 text-[#FF7E5F]" />
+                  Create a New Group
+                </CardTitle>
                 <CardDescription>
                   Chat with our AI assistant to create a personalized travel plan
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <Button onClick={handleChatNow} className="w-full" disabled={isLoading}>
+              <CardContent className="relative z-10">
+                <Button
+                  onClick={handleChatNow}
+                  className="w-full bg-[#FF7E5F] hover:bg-[#FF7E5F]/90 text-white"
+                  disabled={isLoading}
+                >
                   {isLoading ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -233,25 +280,32 @@ export default function HomePage() {
             </Card>
           </div>
 
+
+          {/* How it works section */}
           <div className="mt-16 text-center">
-            <h2 className="text-lg font-medium mb-4">How does it work?</h2>
-            <div className="grid md:grid-cols-3 gap-8 text-muted-foreground">
-              <div>
-                <h3 className="font-medium text-foreground mb-2">1. Join a group</h3>
-                <p>Enter the group ID shared by your travel companions.</p>
-              </div>
-              <div>
-                <h3 className="font-medium text-foreground mb-2">2. Get AI recommendations</h3>
-                <p>Receive personalized suggestions for activities, accommodations, and more.</p>
-              </div>
-              <div>
-                <h3 className="font-medium text-foreground mb-2">3. Plan and collaborate</h3>
-                <p>Fine-tune your itinerary and share it with your travel companions.</p>
-              </div>
+            <h2 className="text-2xl font-bold mb-8">How it works</h2>
+            <div className="grid md:grid-cols-3 gap-8">
+              {[1, 2, 3].map((step, index) => (
+                <div key={step} className="p-6 rounded-lg bg-white shadow-sm hover:shadow-md transition-shadow">
+                  <div className="w-12 h-12 bg-[#FF7E5F] rounded-full flex items-center justify-center text-white font-bold mx-auto mb-4">
+                    {step}
+                  </div>
+                  <h3 className="font-medium text-lg mb-2">
+                    {index === 0 ? "Join a group" :
+                      index === 1 ? "Get AI recommendations" :
+                        "Plan and collaborate"}
+                  </h3>
+                  <p className="text-gray-600">
+                    {index === 0 ? "Enter the group ID shared by your travel companions." :
+                      index === 1 ? "Receive personalized suggestions for activities and accommodations." :
+                        "Fine-tune your itinerary and share it with your companions."}
+                  </p>
+                </div>
+              ))}
             </div>
           </div>
         </div>
-      </main>
-    </div>
+      </main >
+    </div >
   );
 }

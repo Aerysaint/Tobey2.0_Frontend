@@ -19,15 +19,68 @@ import { format as formatDate, addMinutes } from "date-fns";
 interface CalendarProps {
   groupId: string
   activities: Activity[]
+  setActivities: (activities: Activity[]) => void
   getDayBudget: (day: Date) => number
 }
 
-export function Calendar({groupId, activities, getDayBudget }: CalendarProps) {
-  const [startDate, setStartDate] = useState(startOfWeek(new Date()))
+export function Calendar({ groupId, activities, setActivities, getDayBudget }: CalendarProps) {
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const [startDate, setStartDate] = useState<Date>(startOfWeek(new Date()));
+
+  // Update start date when activities change
+  useEffect(() => {
+    if (activities.length > 0) {
+      const sortedActivities = [...activities].sort((a, b) => {
+        if (!a.fromDate || !b.fromDate) return 0;
+        const dateA = new Date(a.fromDate);
+        const dateB = new Date(b.fromDate);
+        return dateA.getTime() - dateB.getTime();
+      });
+
+      const firstActivity = sortedActivities[0];
+      if (firstActivity.fromDate) {
+        const firstActivityDate = new Date(firstActivity.fromDate);
+        const firstActivityWeek = startOfWeek(firstActivityDate);
+        setStartDate(firstActivityWeek);
+      }
+    }
+  }, [activities]);
+
+  // Scroll to first activity on mount and when activities change
+  useEffect(() => {
+    if (activities.length > 0 && scrollAreaRef.current) {
+      const sortedActivities = [...activities].sort((a, b) => {
+        if (!a.fromDate || !b.fromDate) return 0;
+        const dateA = new Date(a.fromDate);
+        const dateB = new Date(b.fromDate);
+        return dateA.getTime() - dateB.getTime();
+      });
+
+      const firstActivity = sortedActivities[0];
+      if (firstActivity.fromDate) {
+        const activityDate = new Date(firstActivity.fromDate);
+        const activityHour = activityDate.getHours();
+        // Calculate scroll position (16px per 15-min slot, 4 slots per hour)
+        const scrollTop = ((activityHour - 2) * 4 * 16); // Scroll to 2 hours before the activity
+        scrollAreaRef.current.scrollTop = Math.max(0, scrollTop);
+      }
+    }
+  }, [activities]);
+
   const days = Array.from({ length: 7 }, (_, i) => addDays(startDate, i))
-  const hours = Array.from({ length: 25 }, (_, i) => i)
-  const quarterHours = [0, 15, 30, 45] // 15-minute intervals
+  const hours = Array.from({ length: 24 }, (_, i) => (i + 6) % 24)
+  const quarterHours = [0, 15, 30, 45]
   const colorMapRef = useRef(new Map<string, string>())
+
+  // Helper function to convert display hour to actual hour
+  const getActualHour = (displayHour: number) => {
+    return displayHour;
+  }
+
+  // Helper function to convert actual hour to display hour
+  const getDisplayHour = (actualHour: number) => {
+    return actualHour;
+  }
 
   // Subscribe to Firestore changes
   useEffect(() => {
@@ -36,7 +89,7 @@ export function Calendar({groupId, activities, getDayBudget }: CalendarProps) {
     const itineraryRef = collection(db, 'sessions', groupId, 'itinerary');
     const unsubscribe = onSnapshot(query(itineraryRef), (snapshot) => {
       const updatedActivities: Activity[] = [];
-      
+
       snapshot.forEach((doc) => {
         const data = doc.data();
         updatedActivities.push({
@@ -87,7 +140,7 @@ export function Calendar({groupId, activities, getDayBudget }: CalendarProps) {
       });
 
       if (response.data === -1) {
-          toast.error("Failed to add activity to itinerary", {
+        toast.error("Failed to add activity to itinerary", {
           description: "The activity may overlap with existing activities"
         });
         return;
@@ -180,9 +233,9 @@ export function Calendar({groupId, activities, getDayBudget }: CalendarProps) {
         </div>
 
         {/* Scrollable Content */}
-        <ScrollArea className="h-full">
+        <ScrollArea className="h-full" ref={scrollAreaRef}>
           <div className="grid grid-cols-[auto_repeat(7,1fr)] gap-4">
-            {/* Time labels - now showing quarter hours */}
+            {/* Time labels */}
             <div className="sticky left-0 z-40 bg-background">
               {hours.map((hour) =>
                 quarterHours.map((minute) => (
@@ -207,10 +260,13 @@ export function Calendar({groupId, activities, getDayBudget }: CalendarProps) {
                       hour={hour}
                       minute={minute}
                       activities={activities}
+                      setActivities={setActivities}
                       onAddActivity={handleAddActivity}
                       onRemoveActivity={handleRemoveActivity}
                       activityColors={colorMapRef.current}
                       groupId={groupId}
+                      getActualHour={getActualHour}
+                      getDisplayHour={getDisplayHour}
                     />
                   ))
                 )}
@@ -233,11 +289,11 @@ interface DraggableActivityProps {
   groupId: string
 }
 
-function DraggableActivity({ 
-  activity, 
-  backgroundColor, 
-  onRemove, 
-  visibleDuration, 
+function DraggableActivity({
+  activity,
+  backgroundColor,
+  onRemove,
+  visibleDuration,
   isStartOfVisible,
   onResize,
   groupId
@@ -258,6 +314,8 @@ function DraggableActivity({
   const showFullContent = visibleDuration >= 60;
 
   const handleResizeMouseDown = (direction: 'top' | 'bottom') => (e: React.MouseEvent) => {
+    if (!activity.fromDate || !activity.toDate) return;
+
     e.stopPropagation();
     setIsResizing(true);
 
@@ -268,10 +326,10 @@ function DraggableActivity({
       moveEvent.preventDefault();
       const deltaY = moveEvent.clientY - startY;
       const cellsDelta = Math.round(deltaY / cellHeight);
-      
+
       const originalDate = new Date(direction === 'top' ? activity.fromDate : activity.toDate);
       const newDate = addMinutes(originalDate, cellsDelta * 15);
-      
+
       // Update the visual position immediately
       const resizeHandle = moveEvent.target as HTMLElement;
       resizeHandle.style.cursor = 'ns-resize';
@@ -360,7 +418,7 @@ function DraggableActivity({
                   </p>
                   <p className="text-xs text-white/75 mt-1">
                     <Clock className="inline h-3 w-3 mr-1" />
-                    {activity.fromDate && format(new Date(activity.fromDate), "h:mm a")} - 
+                    {activity.fromDate && format(new Date(activity.fromDate), "h:mm a")} -
                     {activity.toDate && format(new Date(activity.toDate), "h:mm a")}
                   </p>
                 </div>
@@ -397,10 +455,13 @@ interface CalendarCellProps {
   hour: number
   minute: number
   activities: Activity[]
+  setActivities: (activities: Activity[]) => void
   onAddActivity: (activity: Activity, startTime: Date) => Promise<void>
   onRemoveActivity: (activityId: string) => Promise<void>
   activityColors: Map<string, string>
   groupId: string
+  getActualHour: (displayHour: number) => number
+  getDisplayHour: (actualHour: number) => number
 }
 
 const roundToNearestQuarter = (date: Date) => {
@@ -416,10 +477,13 @@ function CalendarCell({
   hour,
   minute,
   activities,
+  setActivities,
   onAddActivity,
   onRemoveActivity,
   activityColors,
   groupId,
+  getActualHour,
+  getDisplayHour
 }: CalendarCellProps) {
   const [showDetailsForActivity, setShowDetailsForActivity] = useState<string | null>(null)
   const lastToastTime = useRef<number>(0) // Track last toast time
@@ -428,13 +492,13 @@ function CalendarCell({
     () => ({
       accept: ["ACTIVITY", "CALENDAR_ACTIVITY"],
       canDrop: (item: Activity & { source?: string }) => {
-        const originalDuration = item.fromDate && item.toDate 
+        const originalDuration = item.fromDate && item.toDate
           ? differenceInMinutes(new Date(item.toDate), new Date(item.fromDate))
           : 30;
 
         const newActivityStart = roundToNearestQuarter(new Date(day))
-        newActivityStart.setHours(hour, minute, 0, 0)
-        
+        newActivityStart.setHours(getActualHour(hour), minute, 0, 0)
+
         const newActivityEnd = roundToNearestQuarter(addMinutes(newActivityStart, originalDuration))
 
         // Check overlaps only with activities on the same day as the start time
@@ -448,19 +512,19 @@ function CalendarCell({
           // Only check overlaps on the day where the activity starts
           return isSameDay(existingStart, newActivityStart) &&
             (isAfter(newActivityStart, existingStart) && isBefore(newActivityStart, existingEnd) ||
-            isAfter(newActivityEnd, existingStart) && isBefore(newActivityEnd, existingEnd) ||
-            isBefore(newActivityStart, existingStart) && isAfter(newActivityEnd, existingEnd) ||
-            isEqual(newActivityStart, existingStart))
+              isAfter(newActivityEnd, existingStart) && isBefore(newActivityEnd, existingEnd) ||
+              isBefore(newActivityStart, existingStart) && isAfter(newActivityEnd, existingEnd) ||
+              isEqual(newActivityStart, existingStart))
         });
       },
       drop: async (item: Activity & { source?: string }) => {
         const now = Date.now();
-        const originalDuration = item.fromDate && item.toDate 
+        const originalDuration = item.fromDate && item.toDate
           ? differenceInMinutes(new Date(item.toDate), new Date(item.fromDate))
           : 30;
 
         const start = roundToNearestQuarter(new Date(day))
-        start.setHours(hour, minute, 0, 0)
+        start.setHours(getActualHour(hour), minute, 0, 0)
         const end = roundToNearestQuarter(addMinutes(start, originalDuration))
 
         // Check overlaps (same as canDrop but with toast)
@@ -474,9 +538,9 @@ function CalendarCell({
           // Only check overlaps on the day where the activity starts
           return isSameDay(existingStart, start) &&
             (isAfter(start, existingStart) && isBefore(start, existingEnd) ||
-            isAfter(end, existingStart) && isBefore(end, existingEnd) ||
-            isBefore(start, existingStart) && isAfter(end, existingEnd) ||
-            isEqual(start, existingStart))
+              isAfter(end, existingStart) && isBefore(end, existingEnd) ||
+              isBefore(start, existingStart) && isAfter(end, existingEnd) ||
+              isEqual(start, existingStart))
         })
 
         if (hasOverlap) {
@@ -492,21 +556,57 @@ function CalendarCell({
         // Proceed with drop
         try {
           if (item.source === 'calendar') {
-            await api.get('/updateActivityInItinerary', {
+            // Create optimistic update
+            const updatedActivity = {
+              ...item,
+              fromDate: formatDate(start, "yyyy-MM-dd'T'HH:mm:ss"),
+              toDate: formatDate(end, "yyyy-MM-dd'T'HH:mm:ss")
+            };
+
+            // Update UI immediately
+            const updatedActivities = activities.map(a =>
+              a.itineraryId === item.itineraryId ? updatedActivity : a
+            );
+            // Note: You'll need to lift this state up to the parent component
+            // and pass it down as a prop along with its setter
+            setActivities(updatedActivities);
+
+            // Update database in the background
+            api.get('/updateActivityInItinerary', {
               params: {
                 groupid: groupId,
                 activityid: item.itineraryId,
                 fromdate: formatDate(start, "yyyy-MM-dd'T'HH:mm:ss"),
                 todate: formatDate(end, "yyyy-MM-dd'T'HH:mm:ss")
               }
+            }).catch(error => {
+              console.error("Error updating activity:", error);
+              toast.error("Failed to update activity");
+              // Revert the optimistic update on error
+              setActivities(activities);
             });
           } else {
-            await onAddActivity(item, start)
+            // For new activities, create optimistic update
+            const newActivity = {
+              ...item,
+              fromDate: formatDate(start, "yyyy-MM-dd'T'HH:mm:ss"),
+              toDate: formatDate(end, "yyyy-MM-dd'T'HH:mm:ss"),
+              itineraryId: Date.now().toString() // Temporary ID
+            };
+
+            // Update UI immediately
+            setActivities([...activities, newActivity]);
+
+            // Add to database in the background
+            onAddActivity(item, start).catch(error => {
+              console.error("Error adding activity:", error);
+              // Revert the optimistic update on error
+              setActivities(activities);
+            });
           }
-          toast.success("Activity updated successfully")
         } catch (error) {
-          console.error("Error updating activity:", error)
-          toast.error("Failed to update activity")
+          console.error("Error updating activity:", error);
+          toast.error("Failed to update activity");
         }
       },
       collect: (monitor) => ({
@@ -514,7 +614,7 @@ function CalendarCell({
         canDrop: !!monitor.canDrop(),
       }),
     }),
-    [day, hour, minute, activities, groupId, onAddActivity]
+    [day, hour, minute, activities, groupId, onAddActivity, getActualHour]
   )
 
   const cellActivities = activities.filter(activity => {
@@ -523,19 +623,24 @@ function CalendarCell({
     const activityStart = roundToNearestQuarter(new Date(activity.fromDate))
     const activityEnd = roundToNearestQuarter(new Date(activity.toDate))
     const cellTime = new Date(day)
-    cellTime.setHours(hour, minute, 0, 0)
-    
+    cellTime.setHours(getActualHour(hour), minute, 0, 0)
+
     // Check if activity spans into this day
     const dayStart = startOfDay(day)
     const dayEnd = addDaysDateFns(dayStart, 1)
-    
+
     return isWithinInterval(cellTime, { start: activityStart, end: activityEnd }) ||
-           isWithinInterval(activityStart, { start: dayStart, end: dayEnd }) ||
-           isWithinInterval(activityEnd, { start: dayStart, end: dayEnd })
+      isWithinInterval(activityStart, { start: dayStart, end: dayEnd }) ||
+      isWithinInterval(activityEnd, { start: dayStart, end: dayEnd })
   })
 
   const handleResize = async (activity: Activity, direction: 'top' | 'bottom', newDate: Date) => {
     try {
+      if (!activity.fromDate || !activity.toDate) {
+        toast.error("Invalid activity dates");
+        return;
+      }
+
       const roundedNewDate = roundToNearestQuarter(newDate);
       const fromDate = direction === 'top' ? roundedNewDate : roundToNearestQuarter(new Date(activity.fromDate));
       const toDate = direction === 'bottom' ? roundedNewDate : roundToNearestQuarter(new Date(activity.toDate));
@@ -548,7 +653,7 @@ function CalendarCell({
 
       // Check for overlaps
       const hasOverlap = activities.some(existingActivity => {
-        if (!existingActivity.fromDate || existingActivity.itineraryId === activity.itineraryId) return false;
+        if (!existingActivity.fromDate || !existingActivity.toDate || existingActivity.itineraryId === activity.itineraryId) return false;
 
         const existingStart = new Date(existingActivity.fromDate);
         const existingEnd = new Date(existingActivity.toDate);
@@ -564,6 +669,20 @@ function CalendarCell({
         return;
       }
 
+      // Create optimistic update
+      const updatedActivity = {
+        ...activity,
+        fromDate: formatDate(fromDate, "yyyy-MM-dd'T'HH:mm:ss"),
+        toDate: formatDate(toDate, "yyyy-MM-dd'T'HH:mm:ss")
+      };
+
+      // Update UI immediately
+      const updatedActivities = activities.map(a =>
+        a.itineraryId === activity.itineraryId ? updatedActivity : a
+      );
+      setActivities(updatedActivities);
+
+      // Update database in the background
       await api.get('/updateActivityInItinerary', {
         params: {
           groupid: groupId,
@@ -571,9 +690,12 @@ function CalendarCell({
           fromdate: formatDate(fromDate, "yyyy-MM-dd'T'HH:mm:ss"),
           todate: formatDate(toDate, "yyyy-MM-dd'T'HH:mm:ss")
         }
+      }).catch(error => {
+        console.error("Error updating activity:", error);
+        toast.error("Failed to update activity");
+        // Revert the optimistic update on error
+        setActivities(activities);
       });
-
-      toast.success("Activity updated successfully");
     } catch (error) {
       console.error("Error resizing activity:", error);
       toast.error("Failed to update activity");
@@ -584,9 +706,8 @@ function CalendarCell({
     <>
       <div
         ref={drop as any}
-        className={`h-4 border-t p-1 relative transition-colors ${
-          isOver && canDrop ? "bg-primary/20" : isOver && !canDrop ? "bg-destructive/20" : ""
-        } ${minute === 0 ? 'border-t-2' : 'border-t-[0.5px] border-muted'}`}
+        className={`h-4 border-t p-1 relative transition-colors ${isOver && canDrop ? "bg-primary/20" : isOver && !canDrop ? "bg-destructive/20" : ""
+          } ${minute === 0 ? 'border-t-2' : 'border-t-[0.5px] border-muted'}`}
       >
         {cellActivities.map(activity => {
           if (!activity.fromDate || !activity.toDate) return null
@@ -595,18 +716,18 @@ function CalendarCell({
           const activityEnd = roundToNearestQuarter(new Date(activity.toDate))
           const dayStart = startOfDay(day)
           const dayEnd = addDaysDateFns(dayStart, 1)
-          
+
           // Calculate visible portion for this day
           const visibleStart = activityStart < dayStart ? dayStart : activityStart
           const visibleEnd = activityEnd > dayEnd ? dayEnd : activityEnd
           const visibleDuration = differenceInMinutes(visibleEnd, visibleStart)
-          
+
           // Calculate position if this is the start of the visible portion
-          const isStartOfVisible = isEqual(visibleStart, activityStart) || 
+          const isStartOfVisible = isEqual(visibleStart, activityStart) ||
             isBefore(visibleStart, activityEnd)
 
           // Only render if this cell matches the visible start time
-          if (hour !== visibleStart.getHours() || minute !== visibleStart.getMinutes()) return null
+          if (getActualHour(hour) !== visibleStart.getHours() || minute !== visibleStart.getMinutes()) return null
 
           const backgroundColor = activityColors.get(activity.id)
 
