@@ -17,6 +17,7 @@ interface HeaderProps {
 }
 
 export function Header({
+  title,
   budget,
   spent,
   onUpdateBudget,
@@ -60,7 +61,7 @@ export function Header({
         <Button variant="ghost" size="icon" onClick={onHome}>
           <Home className="h-4 w-4" />
         </Button>
-        <h1 className="text-xl font-semibold">Plan Title</h1>
+        <h1 className="text-xl font-semibold">{title}</h1>
       </div>
 
       {/* Center section */}

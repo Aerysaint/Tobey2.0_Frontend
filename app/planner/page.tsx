@@ -82,6 +82,7 @@ export default function PlannerPage() {
   const [spent, setSpent] = useState<number>(0)
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null)
   const [videoId, setVideoId] = useState("");
+  const [groupName, setGroupName] = useState<string>("New Trip")
 
   // Check session and access
   useEffect(() => {
@@ -122,16 +123,15 @@ export default function PlannerPage() {
             });
 
             const groupResponse = await api.get(`/getGroupName?groupId=${groupId}`);
-            const memberCountResponse = await api.get(`/getGroupMemberCount?groupId=${groupId}`);
-
+            
             const groupData = {
               id: groupId,
-              name: groupResponse.data.name,
-              memberCount: memberCountResponse.data.count
+              name: groupResponse.data.name
             };
 
             setGroup(groupData);
             setCurrentGroup(groupData);
+            setGroupName(groupResponse.data.name);
 
             // Return cleanup function
             return () => unsubscribe();
@@ -222,42 +222,6 @@ export default function PlannerPage() {
     }, 0);
   }, [activities]);
 
-  const handleCreateGroup = useCallback(async (groupName: string) => {
-    console.log("Creating group:", groupName);
-    if (!user) {
-      toast.error("Please sign in to create a group")
-      return
-    }
-
-    try {
-      const response = await api.post('/createGroup', {
-        name: groupName,
-        userId: user.uid,
-        userName: user.displayName || "Anonymous"
-      });
-
-      const groupId = response.data.groupId;
-      const groupResponse = await api.get(`/getGroupName?groupId=${groupId}`);
-      const memberCountResponse = await api.get(`/getGroupMemberCount?groupId=${groupId}`);
-
-      const group = {
-        id: groupId,
-        name: groupResponse.data.name,
-        memberCount: memberCountResponse.data.count
-      };
-
-      setCurrentGroup(group);
-      setGroup(group);
-      setIsAIChatOpen(false);
-      toast.success("Group created successfully!");
-      router.push(`/planner?group=${groupId}`);
-    } catch (error) {
-      console.error("Error creating group:", error);
-      toast.error("Failed to create group. Please try again.");
-      router.push("/home");
-    }
-  }, [user, router]);
-
   const handleUpdateBudget = useCallback(
     async (amount: number) => {
       if (!currentGroup) {
@@ -333,6 +297,7 @@ export default function PlannerPage() {
       <div className="flex flex-col h-screen overflow-hidden">
         <Toaster richColors position="top-center" />
         <Header
+          title={groupName}
           budget={budget}
           spent={spent}
           onUpdateBudget={handleUpdateBudget}
@@ -390,16 +355,6 @@ export default function PlannerPage() {
               onClose={() => setShowGroupChat(false)}
             />
           )}
-          <AIAssistantChat
-            isOpen={isAIChatOpen}
-            onClose={() => {
-              setIsAIChatOpen(false);
-              if (!currentGroup) {
-                router.push("/home");
-              }
-            }}
-            onCreateGroup={handleCreateGroup}
-          />
         </div>
         {selectedActivity && (
           <ActivityDetailsPanel

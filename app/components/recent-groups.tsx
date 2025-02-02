@@ -25,31 +25,12 @@ export function RecentGroups() {
 
   const fetchGroups = async () => {
     try {
-      // Get list of group IDs
       const response = await api.get("/getGroups")
-      const groupIds = response.data
-
-      // Fetch details for each group
-      const groupsData = await Promise.all(
-        groupIds.map(async (groupId: string) => {
-          // Get group name
-          const nameResponse = await api.get(
-            `/getGroupName?groupId=${groupId}`
-          )
-
-          // Get member count
-          const memberCountResponse = await api.get(
-            `/getGroupMemberCount?groupId=${groupId}`
-          )
-
-          return {
-            id: groupId,
-            name: nameResponse.data.name,
-            memberCount: memberCountResponse.data.count
-          }
-        })
-      )
-
+      const groupsData = response.data.map((group: any) => ({
+        id: group.id,
+        name: group.name,
+        memberCount: group['member count']  // Using bracket notation due to space in key
+      }))
       setGroups(groupsData)
     } catch (error) {
       console.error("Error loading groups:", error)
@@ -69,7 +50,8 @@ export function RecentGroups() {
         const sessionResponse = await api.get("/authenticateSession");
         if (!sessionResponse.data.session) {
           console.error("No valid session found");
-          toast.error("Session expired. Please reload the page.");
+          toast.error("Session expired. Redirecting to login page");
+          router.push("/");
           return;
         }
 
