@@ -176,8 +176,9 @@ export default function LoginPage() {
       {/* Content */}
       <div className="relative z-10 text-center text-white space-y-8 px-4">
         <h1 className="text-6xl md:text-8xl font-bold tracking-tight font-montserrat">
-          <span className="text-blue-500">To</span>
-          <span className="text-[#FF7E5F]">bey</span>
+          <span className="text-white">Tobey</span>
+          <span className="text-[#FF7E5F]">.</span>
+
         </h1>
         <p className="text-xl md:text-2xl font-light max-w-2xl mx-auto">
           Plan your next group adventure with AI-powered recommendations

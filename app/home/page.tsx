@@ -144,15 +144,20 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen relative">
+      <div
+        className="absolute inset-0 bg-cover bg-center -z-10"
+        style={{ backgroundImage: 'url("/hero-bg.png")' }}
+      />
+
       <Toaster richColors position="top-center" />
 
       {/* Header with user profile */}
-      <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
+      <header className="absolute top-0 left-0 right-0 z-50">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <h1 className="text-2xl font-bold font-montserrat">
-            <span className="text-blue-500">To</span>
-            <span className="text-[#FF7E5F]">bey</span>
+          <h1 className="text-2xl font-bold font-montserrat text-white">
+            <span className="text-white">Tobey</span>
+            <span className="text-[#FF7E5F]">.</span>
           </h1>
 
           <DropdownMenu>
@@ -192,19 +197,22 @@ export default function HomePage() {
       </header>
 
       {/* Hero Section */}
-      <div className="bg-gradient-to-b from-white to-gray-50 py-12">
+      <div className="relative pt-32 pb-12">
         <div className="container mx-auto px-4">
-          <h2 className="text-4xl font-bold text-center mb-6">
-            Welcome back, {user.displayName?.split(' ')[0]}!
+          <h2 className="text-4xl font-bold text-center mb-6 text-transparent">
+            Welcome back, {user?.displayName?.split(' ')[0]}!
           </h2>
-          <p className="text-lg text-center text-gray-600 mb-12">
+          <p className="text-lg text-center text-transparent mb-12">
             Ready to plan your next adventure?
           </p>
         </div>
       </div>
 
+      {/* Invisible spacer */}
+      <div className="h-[6vh]" />
+
       {/* Main content */}
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-8 relative">
         <div className="relative max-w-4xl mx-auto">
           <div className="absolute left-0 -translate-x-[calc(100%+2rem)] top-0 hidden xl:block">
             <RecentGroups />
@@ -279,33 +287,8 @@ export default function HomePage() {
               </CardContent>
             </Card>
           </div>
-
-
-          {/* How it works section */}
-          <div className="mt-16 text-center">
-            <h2 className="text-2xl font-bold mb-8">How it works</h2>
-            <div className="grid md:grid-cols-3 gap-8">
-              {[1, 2, 3].map((step, index) => (
-                <div key={step} className="p-6 rounded-lg bg-white shadow-sm hover:shadow-md transition-shadow">
-                  <div className="w-12 h-12 bg-[#FF7E5F] rounded-full flex items-center justify-center text-white font-bold mx-auto mb-4">
-                    {step}
-                  </div>
-                  <h3 className="font-medium text-lg mb-2">
-                    {index === 0 ? "Join a group" :
-                      index === 1 ? "Get AI recommendations" :
-                        "Plan and collaborate"}
-                  </h3>
-                  <p className="text-gray-600">
-                    {index === 0 ? "Enter the group ID shared by your travel companions." :
-                      index === 1 ? "Receive personalized suggestions for activities and accommodations." :
-                        "Fine-tune your itinerary and share it with your companions."}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
-      </main >
-    </div >
+      </main>
+    </div>
   );
 }
