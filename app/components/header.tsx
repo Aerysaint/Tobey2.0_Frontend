@@ -14,6 +14,7 @@ interface HeaderProps {
   onHome: () => void
   onShare: () => void
   onToggleGroupChats: () => void
+  onRegenerateItinerary: () => void
 }
 
 export function Header({
@@ -24,6 +25,7 @@ export function Header({
   onHome,
   onShare,
   onToggleGroupChats,
+  onRegenerateItinerary,
 }: HeaderProps) {
   const [isEditingBudget, setIsEditingBudget] = useState(false)
   const [tempBudget, setTempBudget] = useState(budget.toString())
@@ -77,6 +79,9 @@ export function Header({
         </Button>
         <Button variant="ghost" size="icon" onClick={onShare}>
           <Share2 className="h-4 w-4" />
+        </Button>
+        <Button onClick={onRegenerateItinerary} variant="outline">
+          Regenerate Itinerary
         </Button>
       </div>
 

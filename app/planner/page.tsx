@@ -19,6 +19,8 @@ import { doc, onSnapshot, collection, query } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import { addDays, startOfDay, isSameDay } from "date-fns"
 import { ActivityDetailsPanel } from "../components/activity-details-panel"
+import { Button } from "@/components/ui/button"
+import { HotelSelectionPopup } from "../components/hotel-selection-popup"
 
 const defaultPlan: Plan = {
   id: "default",
@@ -83,6 +85,7 @@ export default function PlannerPage() {
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null)
   const [videoId, setVideoId] = useState("");
   const [groupName, setGroupName] = useState<string>("New Trip")
+  const [showHotelPopup, setShowHotelPopup] = useState(false)
 
   // Check session and access
   useEffect(() => {
@@ -117,6 +120,13 @@ export default function PlannerPage() {
               if (doc.exists()) {
                 const status = doc.data().status || "";
                 setLoadingStatus(status);
+                
+                // Redirect to chat if status is 'Chatting'
+                if (status === "Chatting") {
+                  router.replace(`/chat?group=${groupId}`);
+                  return;
+                }
+                
                 // Only set loading to false when status is 'Done'
                 setIsLoading(status !== "Done");
               }
@@ -258,6 +268,15 @@ export default function PlannerPage() {
     setVideoId(travelVideoIds[randomIndex]);
   }, []);
 
+  // Add this function to handle regeneration
+  const handleRegenerateItinerary = useCallback(async () => {
+    if (!currentGroup?.id) {
+      toast.error("No group selected");
+      return;
+    }
+    setShowHotelPopup(true);
+  }, [currentGroup]);
+
   // Modified loading state
   if (isLoading) {
     return (
@@ -329,6 +348,7 @@ export default function PlannerPage() {
             }
           }}
           onToggleGroupChats={handleToggleGroupChats}
+          onRegenerateItinerary={handleRegenerateItinerary}
         />
         <div className="flex flex-1 overflow-hidden">
           {(currentGroup || !searchParams.get("chat")) && (
@@ -361,6 +381,12 @@ export default function PlannerPage() {
             activity={selectedActivity}
             groupId={currentGroup?.id || ""}
             onClose={() => setSelectedActivity(null)}
+          />
+        )}
+        {showHotelPopup && currentGroup && (
+          <HotelSelectionPopup
+            groupId={currentGroup.id}
+            onClose={() => setShowHotelPopup(false)}
           />
         )}
       </div>
