@@ -32,6 +32,12 @@ export function HotelSelectionPopup({ groupId, onClose }: HotelSelectionPopupPro
     const fetchCities = async () => {
       try {
         const response = await api.get(`/getCities?groupid=${groupId}`)
+        // Initialize selectedHotels with "-1" for each city
+        const initialSelections = Object.keys(response.data).reduce((acc, city) => ({
+          ...acc,
+          [city]: "-1"
+        }), {})
+        setSelectedHotels(initialSelections)
         setCities(response.data)
       } catch (error) {
         console.error("Error fetching cities:", error)
@@ -56,8 +62,13 @@ export function HotelSelectionPopup({ groupId, onClose }: HotelSelectionPopupPro
     }
 
     try {
-      await api.post("/regenerateItinerary", {
+      console.log(selectedHotels)
+      console.log({
         hotels: selectedHotels
+      });
+      await api.post("/regenerateItinerary", {
+        hotels: selectedHotels,
+        groupId: groupId
       })
       toast.success("Itinerary regeneration started")
       onClose()
@@ -94,6 +105,7 @@ export function HotelSelectionPopup({ groupId, onClose }: HotelSelectionPopupPro
                       <SelectValue placeholder="Select a hotel" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="-1">Choose for me</SelectItem>
                       {hotels.map((hotel) => (
                         <SelectItem key={hotel.HotelCode} value={hotel.HotelCode}>
                           {hotel.HotelName}
