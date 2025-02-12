@@ -203,7 +203,7 @@ export default function ChatPage() {
             <div className="flex-1 overflow-hidden">
                 <ScrollArea className="h-full p-4" ref={scrollAreaRef}>
                     <div className="space-y-4">
-                        {messages.map((message) => (
+                        {messages.slice(1).map((message) => (
                             <div
                                 key={message.id}
                                 className={`flex items-start gap-3 ${message.sender.role === "customer" ? "flex-row-reverse" : ""
