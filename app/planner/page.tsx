@@ -86,8 +86,6 @@ export default function PlannerPage() {
   const [videoId, setVideoId] = useState("");
   const [groupName, setGroupName] = useState<string>("New Trip")
   const [showHotelPopup, setShowHotelPopup] = useState(false)
-  const [localActivities, setLocalActivities] = useState<Activity[]>([])
-  const [isOptimisticUpdate, setIsOptimisticUpdate] = useState(false)
 
   // Check session and access
   useEffect(() => {
@@ -191,19 +189,13 @@ export default function PlannerPage() {
     return () => unsubscribe();
   }, [currentGroup?.id]);
 
-  // Modify the activities subscription effect to respect optimistic updates
+  // Subscribe to activities in Firestore to calculate spent amount
   useEffect(() => {
     if (!currentGroup?.id) return;
 
     const itineraryRef = collection(db, 'sessions', currentGroup.id, 'itinerary');
 
     const unsubscribe = onSnapshot(query(itineraryRef), (snapshot) => {
-      // Skip updates if we're in the middle of an optimistic update
-      if (isOptimisticUpdate) {
-        setIsOptimisticUpdate(false);
-        return;
-      }
-
       const updatedActivities: Activity[] = [];
       let totalSpent = 0;
 
@@ -225,36 +217,11 @@ export default function PlannerPage() {
       });
 
       setActivities(updatedActivities);
-      setLocalActivities(updatedActivities);
       setSpent(totalSpent);
     });
 
     return () => unsubscribe();
-  }, [currentGroup?.id, isOptimisticUpdate]);
-
-  // Add function to handle optimistic updates
-  const handleActivityUpdate = useCallback(async (updatedActivity: Activity) => {
-    // Optimistically update local state
-    setIsOptimisticUpdate(true);
-    setLocalActivities(prevActivities => 
-      prevActivities.map(activity => 
-        activity.id === updatedActivity.id ? updatedActivity : activity
-      )
-    );
-
-    // Send update to server
-    try {
-      await api.post(`/updateActivity`, {
-        groupId: currentGroup?.id,
-        activity: updatedActivity
-      });
-    } catch (error) {
-      console.error("Failed to update activity:", error);
-      // Revert optimistic update on error
-      setLocalActivities(activities);
-      toast.error("Failed to update activity");
-    }
-  }, [currentGroup?.id, activities]);
+  }, [currentGroup?.id]);
 
   // Calculate per day costs
   const getDayBudget = useCallback((day: Date) => {
@@ -394,10 +361,9 @@ export default function PlannerPage() {
               <div className="flex-1 overflow-hidden">
                 <Calendar
                   groupId={currentGroup?.id || ""}
-                  activities={localActivities}
-                  setActivities={setLocalActivities}
+                  activities={activities}
+                  setActivities={setActivities}
                   getDayBudget={getDayBudget}
-                  onActivityUpdate={handleActivityUpdate}
                 />
               </div>
             </>

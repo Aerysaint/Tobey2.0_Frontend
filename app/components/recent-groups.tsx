@@ -101,12 +101,12 @@ export function RecentGroups() {
 
   return (
     <Card className="w-64">
-      <CardHeader>
+      <CardHeader className="pb-1">
         <CardTitle className="text-lg">Your Groups</CardTitle>
       </CardHeader>
       <CardContent className="p-0">
-        <ScrollArea className="h-[400px]">
-          <div className="p-4 space-y-2">
+        <ScrollArea className="h-[240px]">
+          <div className="p-2 space-y-1.5">
             {groups.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 No groups yet. Join one or create a new group.
@@ -116,7 +116,7 @@ export function RecentGroups() {
                 <div
                   key={group.id}
                   onClick={() => router.push(`/planner?group=${group.id}`)}
-                  className="p-3 rounded-lg hover:bg-accent cursor-pointer transition-colors relative group"
+                  className="p-1.5 rounded-lg hover:bg-accent cursor-pointer transition-colors relative group"
                 >
                   <div className="flex justify-between items-start gap-2">
                     <div>
